@@ -1,19 +1,23 @@
 import numpy as np
 import sklearn.metrics as metrics
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib
-import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
-from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
-from datetime import datetime, timedelta, time
 
 
+# class code (tip to remember: goes from lower to higher activity)
+CLASS_CODE = {'sleep': 0, 'sedentary': 1, 'tasks-light': 2, 'walking': 3, 'moderate': 4}
+# list of classes, ordered by code
 CLASSES = ['sleep', 'sedentary', 'tasks-light', 'walking', 'moderate']
-COLORS = ['blue', 'red', 'darkorange', 'lightgreen', 'green']
-CLASSES_DICT = {'sleep': 0, 'sedentary': 1, 'tasks-light': 2, 'walking': 3, 'moderate': 4}
 NUM_CLASSES = len(CLASSES)
+# colors to be used for each class, ordered by code
+COLORS = ['blue', 'red', 'darkorange', 'lightgreen', 'green']
+
+NUM_FEATS = 125  # number of hand-crafted features
+SAMPLE_RATE = 100  # device sample rate (100hz)
+RAW_SHAPE = (3,3000)  # triaxial x 30secs x 100hz
+RAW_DTYPE = 'float32'  # measurements are in float32 precision
+
+
+def load_raw(filepath):
+    return np.memmap(filepath, dtype=RAW_DTYPE, mode='r').reshape(-1,*RAW_SHAPE)
 
 
 def encode_one_hot(y):
@@ -87,9 +91,44 @@ def accuracy_score(y_true, y_pred, pid=None):
         return np.mean(accuracys)
 
 
+import jpype
+import jpype.imports
+class Extractor():
+    ''' A wrapper of the Java class FeatureExtractor using the JPype package.
+    It starts a Java Virtual Machine, instantiates FeatureExtractor, and
+    implements 'extract' method to handle numpy arrays.
+    '''
+    def __init__(self):
+        # start Java Virtual Machine and instantiate
+        if not jpype.isJVMStarted():
+            jpype.addClassPath(".")
+            jpype.addClassPath("JTransforms-3.1-with-dependencies.jar")
+            jpype.startJVM(convertStrings=False)
+        self.java_extractor = jpype.JClass('FeatureExtractor')
+
+    def extract(self, xyz):
+        xArray, yArray, zArray = xyz
+        xArray = jpype.JArray(jpype.JFloat, 1)(xArray)
+        yArray = jpype.JArray(jpype.JFloat, 1)(yArray)
+        zArray = jpype.JArray(jpype.JFloat, 1)(zArray)
+        return np.asarray(self.java_extractor.extract(
+            xArray, yArray, zArray, SAMPLE_RATE))
+
+
+# ---------------------------------------
+#  Code for the activity timeseries plot
+# ---------------------------------------
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
+from datetime import datetime, timedelta, time
 def plot_activity(x, y, t):
+    ''' Plot activity timeseries '''
     BACKGROUND_COLOR = '#d3d3d3' # lightgray
-    COLORS = ['blue', 'red', 'darkorange', 'lightgreen', 'green']
 
     def split_by_timegap(group, seconds=30):
         subgroupIDs = (group.index.to_series().diff() > timedelta(seconds=seconds)).cumsum()
