@@ -1,5 +1,6 @@
 import numpy as np
 import sklearn.metrics as metrics
+import tempfile
 from numba import jit
 
 
@@ -92,8 +93,24 @@ def accuracy_score(y_true, y_pred, pid=None):
         return np.mean(accuracys)
 
 
-@jit(nopython=True)
-def sqrsum(alist):
+# @jit(nopython=True)
+def _sum(alist):
+    ''' Compute sum. Intended for large memmap arrays that do not
+    fit in memory. It uses Kahan summation algorithm:
+    https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
+    asum = np.zeros_like(alist[0])
+    c = np.zeros_like(alist[0])
+    for i in range(len(alist)):
+        a = alist[i]
+        y = a - c
+        t = asum + y
+        c = (t - asum) - y
+        asum = t
+    return asum
+
+
+# @jit(nopython=True)
+def _sqrsum(alist):
     ''' Compute sum of squares. Intended for large memmap arrays that do not
     fit in memory. It uses Kahan summation algorithm:
     https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
@@ -108,29 +125,102 @@ def sqrsum(alist):
     return asqrsum
 
 
-import tempfile
+# @jit(nopython=True)
+def sum_sqrsum(alist):
+    ''' Compute sum and sum of squares. Intended for large memmap arrays that
+    do not fit in memory. It uses Kahan summation algorithm for better precision:
+    https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
+    asum = np.zeros_like(alist[0])
+    asqrsum = np.zeros_like(alist[0])
+
+    c_sum = np.zeros_like(alist[0])
+    c_sqrsum = np.zeros_like(alist[0])
+
+    for i in range(len(alist)):
+
+        a_sum = alist[i]
+        y_sum = a_sum - c_sum
+        t_sum = asum + y_sum
+        c_sum = (t_sum - asum) - y_sum
+        asum = t_sum
+
+        a_sqrsum = alist[i]**2
+        y_sqrsum = a_sqrsum - c_sqrsum
+        t_sqrsum = asqrsum + y_sqrsum
+        c_sqrsum = (t_sqrsum - asqrsum) - y_sqrsum
+        asqrsum = t_sqrsum
+
+    return asum, asqrsum
+
+
+def mu_std(alist):
+    asum, asqrsum = sum_sqrsum(alist)
+    mu = asum / len(alist)
+    var = np.maximum(0, asqrsum/len(alist) - mu**2)
+    std = np.sqrt(var)
+    return mu, std
+
+
 def normalize_data(X, mu=None, std=None):
     ''' Normalize dataset -- same as sklearn.preprocessing.StandarScaler.
     Intended for large memmap arrays that do not fit in memory (otherwise
     just use sklearn's method). The returned normalized array is a numpy
     memmap, mapped to a temporary file. '''
     n = X.shape[0]
-    if mu is None:
-        mu = np.mean(X, axis=0)
-    if std is None:
-        asqrsum = sqrsum(X)
-        var = np.maximum(0, asqrsum/n - mu**2)
-        std = np.sqrt(var)
+    if mu is None or std is None:
+        mu, std = mu_std(X)
 
-    # create memmap (using a temporary file) with normalized data
-    tmp = tempfile.TemporaryFile()
-    X_new = np.memmap(tmp, mode='w+', dtype=X.dtype, shape=X.shape)
-    NFLUSH = 1024
+    X_new = np.memmap(tempfile.TemporaryFile(), mode='w+', dtype=X.dtype, shape=X.shape)
+    NFLUSH = 1048
     for i in range(n):
         X_new[i] = (X[i] - mu) / std
         if (i+1) % NFLUSH ==0 or i == (n-1):
             X_new.flush()
     return X_new, mu, std
+
+
+class ArrayFromIdxs(object):
+    ''' Simple wrapper for X[idxs], without returning a copy. Intended for
+    large memmap arrays that do not fit in memory.'''
+    def __init__(self, X, idxs):
+        self.X = X
+        self.idxs = np.asarray(sorted(set(idxs)))
+        self.shape = (len(idxs), *X.shape[1:])
+        self.dtype = X.dtype
+
+    def __getitem__(self, item):
+        return self.X[self.idxs[item]]
+
+    def __len__(self):
+        return len(self.idxs)
+
+
+class ArrayFromMask(ArrayFromIdxs):
+    ''' Simple wrapper for X[mask], without returning a copy. Intended for
+    large memmap arrays that do not fit in memory.'''
+    def __init__(self, X, mask):
+        idxs = np.where(mask)[0]
+        super().__init__(X, idxs)
+
+
+def memmap_from_idxs(X, idxs):
+    ''' Create a memmap for X[idxs] '''
+    idxs = sorted(set(idxs))
+    dtype = X.dtype
+    shape = (len(idxs), *X.shape[1:])
+    X_new = np.memmap(tempfile.TemporaryFile(), mode='w+', dtype=dtype, shape=shape)
+    NFLUSH = 1048
+    for i, idx in enumerate(idxs):
+        X_new[i] = X[idx]
+        if (i+1) % NFLUSH ==0 or i == (len(idxs)-1):
+            X_new.flush()
+    return X_new
+
+
+def memmap_from_mask(X, mask):
+    ''' Create a memmap for X[mask] '''
+    idxs = np.where(mask)[0]
+    return memmap_from_idxs(X, idxs)
 
 
 # -------------------------------------------
@@ -144,7 +234,7 @@ class Extractor():
     implements 'extract' method to handle numpy arrays.
     '''
     def __init__(self):
-        # start Java Virtual Machine and instantiate
+        # start Java Virtual Machine and instantiate FeatureExtractor
         if not jpype.isJVMStarted():
             jpype.addClassPath(".")
             jpype.addClassPath("JTransforms-3.1-with-dependencies.jar")
