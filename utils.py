@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.metrics as metrics
 import tempfile
-from numba import jit
+# from numba import jit
 
 
 # class code (tip to remember: goes from lower to higher activity)
@@ -94,38 +94,6 @@ def accuracy_score(y_true, y_pred, pid=None):
 
 
 # @jit(nopython=True)
-def _sum(alist):
-    ''' Compute sum. Intended for large memmap arrays that do not
-    fit in memory. It uses Kahan summation algorithm:
-    https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
-    asum = np.zeros_like(alist[0])
-    c = np.zeros_like(alist[0])
-    for i in range(len(alist)):
-        a = alist[i]
-        y = a - c
-        t = asum + y
-        c = (t - asum) - y
-        asum = t
-    return asum
-
-
-# @jit(nopython=True)
-def _sqrsum(alist):
-    ''' Compute sum of squares. Intended for large memmap arrays that do not
-    fit in memory. It uses Kahan summation algorithm:
-    https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
-    asqrsum = np.zeros_like(alist[0])
-    c = np.zeros_like(alist[0])
-    for i in range(len(alist)):
-        a = alist[i]**2
-        y = a - c
-        t = asqrsum + y
-        c = (t - asqrsum) - y
-        asqrsum = t
-    return asqrsum
-
-
-# @jit(nopython=True)
 def sum_sqrsum(alist):
     ''' Compute sum and sum of squares. Intended for large memmap arrays that
     do not fit in memory. It uses Kahan summation algorithm for better precision:
@@ -161,24 +129,6 @@ def mu_std(alist):
     return mu, std
 
 
-def normalize_data(X, mu=None, std=None):
-    ''' Normalize dataset -- same as sklearn.preprocessing.StandarScaler.
-    Intended for large memmap arrays that do not fit in memory (otherwise
-    just use sklearn's method). The returned normalized array is a numpy
-    memmap, mapped to a temporary file. '''
-    n = X.shape[0]
-    if mu is None or std is None:
-        mu, std = mu_std(X)
-
-    X_new = np.memmap(tempfile.TemporaryFile(), mode='w+', dtype=X.dtype, shape=X.shape)
-    NFLUSH = 1048
-    for i in range(n):
-        X_new[i] = (X[i] - mu) / std
-        if (i+1) % NFLUSH ==0 or i == (n-1):
-            X_new.flush()
-    return X_new, mu, std
-
-
 class ArrayFromIdxs(object):
     ''' Simple wrapper for X[idxs], without returning a copy. Intended for
     large memmap arrays that do not fit in memory.'''
@@ -204,7 +154,7 @@ class ArrayFromMask(ArrayFromIdxs):
 
 
 def memmap_from_idxs(X, idxs):
-    ''' Create a memmap for X[idxs] '''
+    ''' Create a memmap for X[idxs] on a temporary file '''
     idxs = sorted(set(idxs))
     dtype = X.dtype
     shape = (len(idxs), *X.shape[1:])
@@ -218,7 +168,7 @@ def memmap_from_idxs(X, idxs):
 
 
 def memmap_from_mask(X, mask):
-    ''' Create a memmap for X[mask] '''
+    ''' Create a memmap for X[mask] on a temporary file '''
     idxs = np.where(mask)[0]
     return memmap_from_idxs(X, idxs)
 
