@@ -76,6 +76,9 @@ def cohen_kappa_score(y_true, y_pred, pid=None):
         for i in np.unique(pid):
             _y_true = y_true[pid == i]
             _y_pred = y_pred[pid == i]
+            # check there are enough instances to compute kappa
+            if len(_y_true) <= 1:
+                continue
             kappas.append(metrics.cohen_kappa_score(_y_true, _y_pred))
         return np.mean(kappas)
 
@@ -96,7 +99,7 @@ def accuracy_score(y_true, y_pred, pid=None):
 # @jit(nopython=True)
 def sum_sqrsum(alist):
     ''' Compute sum and sum of squares. Intended for large memmap arrays that
-    do not fit in memory. It uses Kahan summation algorithm for better precision:
+    do not fit in memory. It uses Kahan summation algorithm to reduce rounding errors:
     https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
     asum = np.zeros_like(alist[0])
     asqrsum = np.zeros_like(alist[0])
