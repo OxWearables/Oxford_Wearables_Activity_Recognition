@@ -23,11 +23,18 @@ def load_raw(filepath):
 
 
 def encode_one_hot(y):
+    '''
+    0 -> 1,0,0,0,0
+    1 -> 0,1,0,0,0
+    2 -> 0,0,1,0,0
+    3 -> 0,0,0,1,0
+    4 -> 0,0,0,0,1
+    '''
     return (y.reshape(-1,1) == np.arange(NUM_CLASSES)).astype(int)
 
 
 def train_hmm(Y_pred, y_true):
-
+    ''' https://en.wikipedia.org/wiki/Hidden_Markov_model '''
     if Y_pred.ndim == 1 or Y_pred.shape[1] == 1:
         Y_pred = encode_one_hot(Y_pred)
 
@@ -43,6 +50,7 @@ def train_hmm(Y_pred, y_true):
 
 
 def viterbi(y_pred, prior, transition, emission):
+    ''' https://en.wikipedia.org/wiki/Viterbi_algorithm '''
     small_number = 1e-16
 
     def log(x):
@@ -76,8 +84,8 @@ def cohen_kappa_score(y_true, y_pred, pid=None):
         for i in np.unique(pid):
             _y_true = y_true[pid == i]
             _y_pred = y_pred[pid == i]
-            # check there are enough instances to compute kappa
-            if len(_y_true) <= 1:
+            if len(np.unique(_y_true)) <= 1:
+                # cannot compute kappa with only one class
                 continue
             kappas.append(metrics.cohen_kappa_score(_y_true, _y_pred))
         return np.mean(kappas)
@@ -125,6 +133,7 @@ def sum_sqrsum(alist):
 
 
 def mu_std(alist):
+    ''' Mean and standad deviation of a list of numbers or arrays '''
     asum, asqrsum = sum_sqrsum(alist)
     mu = asum / len(alist)
     var = np.maximum(0, asqrsum/len(alist) - mu**2)
