@@ -198,8 +198,8 @@ class Extractor():
     def __init__(self):
         # start Java Virtual Machine and instantiate FeatureExtractor
         if not jpype.isJVMStarted():
-            jpype.addClassPath(".")
-            jpype.addClassPath("JTransforms-3.1-with-dependencies.jar")
+            jpype.addClassPath("java_feature_extractor")
+            jpype.addClassPath("java_feature_extractor/JTransforms-3.1-with-dependencies.jar")
             jpype.startJVM(convertStrings=False)
         self.java_extractor = jpype.JClass('FeatureExtractor')
 
