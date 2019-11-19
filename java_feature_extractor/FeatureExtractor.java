@@ -169,6 +169,11 @@ public class FeatureExtractor {
 
     }
 
+    /* From paper:
+     * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior Classification.
+     * Ellis K, Kerr J, Godbole S, Staudenmayer J, Lanckriet G.
+     * https://www.ncbi.nlm.nih.gov/pubmed/26673126
+     */
 	public static double [] calculateSanDiegoFeatures(
         double[] xArray, double[] yArray, double[] zArray, int sampleRate)
         {
@@ -380,10 +385,11 @@ public class FeatureExtractor {
 
 	}
 
-	/* From table in paper:
+	/* From paper:
 	 * A universal, accurate intensity-based classification of different physical
 	 * activities using raw data of accelerometer.
 	 * Henri Vaha-Ypya, Tommi Vasankari, Pauliina Husu, Jaana Suni and Harri Sievanen
+     * https://www.ncbi.nlm.nih.gov/pubmed/24393233
 	 */
 	public static double[] calculateMADFeatures(double[] vArray)
     {
@@ -470,8 +476,7 @@ public class FeatureExtractor {
 	}
 
 	/*
-	 * Gets [numEachAxis] FFT bins for each of the 3 axes and combines them into 'mfft' column.
-	 * If getEachAxis is true it will output the FFT bins for each axis separately
+	 * Get FFT bins for each of the 3 axes, also combines them into 'mfft'.
 	 */
 	public static double[] calculateFFT3D(
         double[] xArray, double[] yArray, double[] zArray, double[] vArray, int nFFT)
@@ -531,9 +536,11 @@ public class FeatureExtractor {
 
 	}
 
-	/* Physical Activity Classification using the GENEA Wrist Worn Accelerometer
-		Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
-	*/
+    /* From paper:
+	 * Physical Activity Classification using the GENEA Wrist Worn Accelerometer
+	 * Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
+     * https://www.ncbi.nlm.nih.gov/pubmed/21988935
+	 */
     public static double [] calculateUnileverFeatures(double[] vArray, int sampleRate)
     {
 		int n = vArray.length;
