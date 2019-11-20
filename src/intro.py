@@ -5,7 +5,7 @@
 <img src="ax3_orientation.jpg" width="300"/>
 
 The Capture24 dataset consists of wrist-worn accelerometer measurements collected from about 150 participants that wore the device for 24 hours.
-Along with the accelerometer, the participants also wore a body camera that recorded their daily activities. Thus, an activity label is assigned to every 30 seconds of accelerometer reading. The identified activities are *sleep*, *sedentary*, *tasks-light*, *walking* and *moderate*.
+Along with the accelerometer, the participants also wore a body camera that recorded their daily activities. Trained human annotators then assigned an activity label to every 30 seconds of accelerometer recording based on the camera information. The identified activities are *sleep*, *sedentary*, *tasks-light*, *walking* and *moderate*.
 
 The two main files we will work with are `X_raw.dat` and `capture24.npz`. The
 first contains the raw accelerometer measurements and the latter is a bundle
