@@ -53,7 +53,7 @@ print("Shape of X_test:", X_test.shape)
 
 # %%
 # Argument oob_score=True to be used for HMM smoothing (see below)
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
+classifier = RandomForestClassifier(n_estimators=1000, oob_score=True, n_jobs=2)
 classifier.fit(X_train, y_train)
 
 y_test_pred = classifier.predict(X_test)
