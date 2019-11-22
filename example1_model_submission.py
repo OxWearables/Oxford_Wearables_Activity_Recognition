@@ -23,27 +23,27 @@ def predict(X):
 
     # Load PyTorch model
     # https://pytorch.org/tutorials/beginner/saving_loading_models.html)
-    model = OneLayer()
-    model.load_state_dict(torch.load('your_cnn_model.pth'))
+    cnn = CNN()
+    cnn.load_state_dict(torch.load('your_cnn_model.pth'))
 
     # Load HMM weights
     hmm = np.load('your_hmm_model.npz')
     prior, emission, transition = hmm['prior'], hmm['emission'], hmm['transition']
 
     # Classify
-    model.eval()
+    cnn.eval()
     X = torch.from_numpy(X)
     with torch.no_grad():
-        y = model(X).numpy()
+        y = cnn(X).numpy()
     y = utils.viterbi(y, prior, emission, transition)
 
     return y
 
 
-class OneLayer(nn.Module):
+class CNN(nn.Module):
     ''' Actually this is just linear regression '''
     def __init__(self, in_channels=3, input_size=3000, output_size=5):
-        super(OneLayer, self).__init__()
+        super(CNN, self).__init__()
 
         self.main = nn.Sequential(
             nn.Conv1d(in_channels, output_size, input_size, 1, 1, bias=True),
