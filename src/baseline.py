@@ -26,14 +26,15 @@ np.random.seed(42)
 # A function to plot the activity timeseries of a participant
 def plot_activity(X, y, pid, time, ipid=3):
     mask = pid == ipid
+    # The first hand-crafted feature X[:,0] is mean acceleration
     return utils.plot_activity(X[:,0][mask], y[mask], time[mask])
 
 # %%
 ''' ###### Load dataset and hold out some instances for testing '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 print("Contents of capture24.npz:", data.files)
 X, y, pid, time = data['X_feats'], data['y'], data['pid'], data['time']
 
@@ -49,21 +50,34 @@ print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
 # %%
-''' ###### Train a random forest classifier '''
+''' ###### Train a random forest classifier
+
+*Note: this takes a few minutes*
+'''
 
 # %%
 # Argument oob_score=True to be used for HMM smoothing (see below)
-classifier = RandomForestClassifier(n_estimators=1000, oob_score=True, n_jobs=2)
+classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
 classifier.fit(X_train, y_train)
 
+# %%
+''' ###### Evaluate model on held-out participants
+'''
+
+# %%
 y_test_pred = classifier.predict(X_test)
 print("\n--- Random forest performance ---")
 print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_pred, pid_test))
 print("Accuracy score:", utils.accuracy_score(y_test, y_test_pred, pid_test))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_test_pred))
 
-# Activity plot for participant #3
+# Activity plot for participant #3 -- predicted
 fig, _ = plot_activity(X_test, y_test_pred, pid_test, time_test, ipid=3)
+fig.suptitle('participant #3 - predicted', fontsize='small')
+fig.show()
+# Activity plot for participant #3 -- ground truth
+fig, _ = plot_activity(X_test, y_test, pid_test, time_test, ipid=3)
+fig.suptitle('participant #3 - ground truth', fontsize='small')
 fig.show()
 
 # %%
@@ -152,11 +166,13 @@ fig.show()
 # %%
 '''
 ## Is a simple logistic regression enough?
+
+*Note: this takes a few minutes*
 '''
 
 # %%
 classifier_LR = LogisticRegression(
-    random_state=42, solver='saga', multi_class='multinomial', max_iter=10000, n_jobs=2)
+    random_state=42, solver='saga', multi_class='multinomial', max_iter=10000, n_jobs=1, verbose=True)
 classifier_LR.fit(X_train, y_train)
 y_test_LR = classifier_LR.predict(X_test)
 print("\n--- Logistic regression performance ---")

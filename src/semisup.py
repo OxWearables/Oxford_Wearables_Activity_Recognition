@@ -6,13 +6,16 @@
 
 While digital data collection is becoming easier and cheaper, labeling such data
 still requires expensive and time-consuming human labor.
-For example, while it is possible to label accelerometer readings for ~150
+For example, while it is possible to label accelerometer measurements for ~150
 participants as in our Capture24 dataset, it is unfeasible to do so for the
-the tens of thousands of *unlabeled* accelerometer measurements that are currently available in the [UK Biobank](https://en.wikipedia.org/wiki/UK_Biobank), since *a)* compliance to wear a body camera
-is much lower than a wrist-worn accelerometer and *b)* the human labor to go
-through all the camera recordings would be very expensive.
-Semi-supervised learning is therefore of great interest, where the aim is to somehow use
-the unlabeled data to improve the model performance.
+tens of thousands of *unlabeled* accelerometer measurements that are
+currently available in the [UK
+Biobank](https://www.ukbiobank.ac.uk/activity-monitor-3/) because *a)*
+compliance to wear body cameras is much lower than wrist-worn accelerometers
+and *b)* the human labor to go through all the camera recordings would be
+very expensive. Semi-supervised learning is therefore of great interest,
+where the aim is to somehow use the unlabeled data to improve the model
+performance.
 
 ###### Setup
 '''
@@ -32,8 +35,8 @@ np.random.seed(42)
 ''' ###### Load dataset and hold out some instances for testing '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 print("Contents of:", data.files)
 X, y, pid, time = data['X_feats'], data['y'], data['pid'], data['time']
 
@@ -50,21 +53,24 @@ print("Shape of X_test:", X_test.shape)
 
 # %%
 '''
-One of the simplest semi-supervised methods is using proxy-labels via self-training. The idea is to simply evaluate a trained model on the unlabeled instances and incorporate those with high confidence predictions into the training set, then re-train the model on the augmented set. This process is repeated several times until some criteria is met, e.g. when no more instances are being included in the training set.
+One of the simplest semi-supervised methods is based on using proxy-labels via self-training. The idea is to simply evaluate a trained model on the unlabeled instances and incorporate those with high confidence predictions into the training set, then re-train the model on the augmented set. This process is repeated several times until some criteria is met, e.g. when no more instances are being included in the training set.
 This simple technique works well when the initial model is already very strong. If the initial model is weak, however, it may reinforce the mistakes in its predictions.
+In the following, we train a random forest classifier with self-training.
 
-In the following, we train a random forest classifier with self-training:
+###### Self-training
+
+*Note: this takes several minutes*
 '''
 
 # %%
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
+classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4)
 
 # initial model and predictions
 classifier.fit(X_train, y_train)
 y_test_pred = classifier.predict(X_test)
 y_test_prob = classifier.predict_proba(X_test)
 y_test_pred_old = None
-max_iter = 10
+max_iter = 5
 prob_threshold = 0.8
 
 for i in tqdm(range(max_iter)):
@@ -88,7 +94,7 @@ for i in tqdm(range(max_iter)):
     y_test_prob = classifier.predict_proba(X_test)
 
 # %%
-''' Smooth the predictions via HMM and evaluate: '''
+''' ###### Smooth the predictions via HMM and evaluate '''
 
 # %%
 Y_oob = classifier.oob_decision_function_[:y_train.shape[0]]
@@ -104,6 +110,7 @@ print("Confusion matrix:\n", confusion_matrix(y_test, y_test_hmm))
 '''
 ###### Ideas
 
+- Tune acceptance threshold to incorporate high confidence predictions.
 - Incorporate the HMM smoothing into the self-training loop.
 
 ###### References

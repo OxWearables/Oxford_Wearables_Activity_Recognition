@@ -38,8 +38,8 @@ def my_scatter_plot(X, y):
 '''###### Load the dataset files '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 print("Contents of capture24.npz:", data.files)
 X_feats, y, pid, time, annotation = \
     data['X_feats'], data['y'], data['pid'], data['time'], data['annotation']
@@ -48,15 +48,15 @@ print('y shape:', y.shape)
 print('pid shape:', pid.shape)
 print('time shape:', time.shape)
 print('annotation shape:', annotation.shape)
-# X_raw = utils.load_raw('X_raw.dat')
-X_raw = np.load('X_raw_small.npy')
+X_raw = np.load('X_raw.npy', mmap_mode='r')
+# X_raw = np.load('X_raw_small.npy')
 print('X_raw shape:', X_raw.shape)
 
 # %%
 '''
 ###### Description of the arrays
 
-- `X_raw` array of shape `(N,3,3000)` where each row corresponds to 30 seconds of raw tri-axial measurement at 100Hz.
+- `X_raw` numpy array of shape `(N,3,3000)` where each row corresponds to 30 seconds of raw tri-axial measurement at 100Hz.
 
 - `X_feats` numpy array of shape `(N,125)` where each row corresponds to *hand-crafted features* extracted from raw 30 seconds measurements. These are collections of features used in published literature such as mean acceleration, covariances between axes, Fourier coefficients, estimated angles, etc. For details, see *References* at the bottom.
 
@@ -68,7 +68,7 @@ print('X_raw shape:', X_raw.shape)
 
 - `annotation` numpy array of shape `(N,)` containing fine-grained descriptions of the activity performed in the corresponding instance.
 
-Arrays `X_feats`, `y`, `time`, `pid` and `annotation` are stored in a single `capture24.npz` file, while `X_raw` is stored separately as a numpy `memmap` due to its large size (~11GB).
+Arrays `X_feats`, `y`, `time`, `pid` and `annotation` are stored in a single `capture24.npz` file, while `X_raw` is stored separately in `X_raw.npy` due to its large size (~11GB).
 
 **Note:**
 The provided arrays `X_feats`, `X_raw`, `y`, etc. are so that consecutive
@@ -85,13 +85,14 @@ Interrupts in the measurement within a same participant may also occur
 Visualizing the dataset is an important part of data science. This can
 provide useful insights about the problem at hand.
 
-Let's visualize one instance of each activity identified:
+Let's visualize one instance of raw acceleration for each activity:
 '''
 
 # %%
 fig, axs = plt.subplots(5, sharex=True, sharey=True, figsize=(5,5))
 for i in range(utils.NUM_CLASSES):
-    axs[i].plot(X_raw[y == i][0].T)
+    idx = np.where(y == i)[0]
+    axs[i].plot(X_raw[idx][0].T)
     axs[i].set_title(utils.CLASSES[i])
 fig.tight_layout()
 fig.show()
@@ -102,8 +103,8 @@ After visualizing individual instances, the next step is to visualize
 our dataset as a whole to have a grasp of the data distribution. A
 standard visualization approach is to scatter-plot the two principal
 components of our dataset.
-For performance, let us perform the visualization on
-a smaller subset of our data since our data is rather big:
+For performance, let us perform the visualization on a small subset of our
+data since our data is rather big:
 '''
 
 # %%
@@ -115,6 +116,8 @@ y = y[mask]
 pid = pid[mask]
 time = time[mask]
 annotation = annotation[mask]
+print('X_feats shape:', X_feats.shape)
+print('X_raw shape:', X_raw.shape)
 
 # %%
 '''###### PCA visualization '''
@@ -135,6 +138,8 @@ The PCA plot is already very informative. What if we want to
 visualize more components? A popular high-dimensional data visualization tool
 is _t-distributed stochastic neighbor embedding_ (t-SNE). We next use t-SNE to
 visualize 128 principal components of our raw dataset:
+
+*Note: this takes a few minutes*
 '''
 
 # %%
@@ -152,7 +157,10 @@ fig.show()
 ###### t-SNE on `X_feats`
 
 Finally, let's perform a t-SNE visualization this time on the
-hand-crafted features `X_feats`:'''
+hand-crafted features `X_feats`:
+
+*Note: this takes a few minutes*
+'''
 
 # %%
 print("Plotting t-SNE on hand-crafted features...")
