@@ -14,30 +14,19 @@ In this section, instead of using the hand-crafted features, we use a neural net
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage import median_filter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-from tqdm import tqdm
-# from tqdm.notebook import tqdm
+# from tqdm import tqdm
+from tqdm.notebook import tqdm
 import utils
 
 # For reproducibility
 np.random.seed(42)
 torch.manual_seed(42)
 cudnn.benchmark = True
-
-# Function to plot dict of scores
-def plot_scores(scores, xlabel=None, ylabel=None):
-    fig, ax = plt.subplots()
-    for key, vals in scores.items():
-        ax.plot(vals, label=key)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    return fig, ax
 
 # %%
 ''' ###### Grab a GPU if there is one '''
@@ -54,12 +43,12 @@ else:
 ''' ###### Load dataset and hold out some instances for testing '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 print("Contents of capture24.npz:", data.files)
 y, pid, time = data['y'], data['pid'], data['time']
-# X = utils.load_raw('X_raw.dat')
-X = np.load('X_raw_small.npy')
+X = np.load('X_raw.npy', mmap_mode='r')
+# X = np.load('X_raw_small.npy')
 print("Raw dataset shape:", X.shape)
 
 # Hold out some participants for testing the model
@@ -68,6 +57,7 @@ mask_test = np.isin(pid, pids_test)
 mask_train = ~mask_test
 y_train, y_test = y[mask_train], y[mask_test]
 pid_train, pid_test = pid[mask_train], pid[mask_test]
+# X[mask_train] and X[mask_test] if you like to live dangerously
 X_train = utils.ArrayFromMask(X, mask_train)
 X_test = utils.ArrayFromMask(X, mask_test)
 print("Shape of X_train", X_train.shape)
@@ -82,60 +72,48 @@ To obtain probabilities, we can pass each row to a softmax. Then to report a cla
 '''
 
 # %%
+class ConvBNReLU(nn.Module):
+    ''' Convolution + batch normalization + ReLU is a common trio '''
+    def __init__(
+        self, in_channels, out_channels,
+        kernel_size=3, stride=1, padding=1, bias=True
+    ):
+        super(ConvBNReLU, self).__init__()
+
+        self.main = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels,
+                kernel_size, stride, padding, bias=bias),
+            nn.BatchNorm1d(out_channels),
+            nn.ReLU(True)
+        )
+
+    def forward(self, x):
+        return self.main(x)
+
+
 class CNN(nn.Module):
+    ''' Typical CNN design with pyramid-like structure '''
     def __init__(self, output_size=5, in_channels=3, num_filters_init=8):
         super(CNN, self).__init__()
 
         self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels, num_filters_init,
-                4, 2, 1, bias=False),  # (n, 1500)
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init, num_filters_init,
-                4, 2, 1, bias=False),  # (n, 750)
-            nn.BatchNorm1d(num_filters_init),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init, num_filters_init*2,
-                4, 2, 1, bias=False),  # (n^2, 375)
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*2, num_filters_init*2,
-                3, 2, 1, bias=False),  # (n^2, 188)
-            nn.BatchNorm1d(num_filters_init*2),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*2, num_filters_init*4,
-                4, 2, 1, bias=False),  # (n^4, 94)
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*4, num_filters_init*4,
-                4, 2, 1, bias=False),  # (n^4, 47)
-            nn.BatchNorm1d(num_filters_init*4),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*4, num_filters_init*8,
-                3, 2, 1, bias=False),  # (n^8, 24)
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*8, num_filters_init*8,
-                4, 2, 1, bias=False),  # (n^8, 12)
-            nn.BatchNorm1d(num_filters_init*8),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*8, num_filters_init*16,
-                4, 2, 1, bias=False),  # (n^16, 6)
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*16, num_filters_init*16,
-                4, 2, 1, bias=False),  # (n^16, 3)
-            nn.BatchNorm1d(num_filters_init*16),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*16, num_filters_init*32,
-                3, 1, 0, bias=False),  # (n^32, 1)
-            nn.BatchNorm1d(num_filters_init*32),
-            nn.ReLU(True),
-            nn.Conv1d(num_filters_init*32, output_size,  # (output_dim, 1)
-                1, 1, 0, bias=True),
+            ConvBNReLU(in_channels, num_filters_init,
+            8, 4, 2, bias=False),  # 750
+            ConvBNReLU(num_filters_init, num_filters_init*2,
+            6, 4, 2, bias=False),  # 188
+            ConvBNReLU(num_filters_init*2, num_filters_init*4,
+            8, 4, 2, bias=False),  # 47
+            ConvBNReLU(num_filters_init*4, num_filters_init*8,
+            3, 2, 1, bias=False),  # 24
+            ConvBNReLU(num_filters_init*8, num_filters_init*16,
+            4, 2, 1, bias=False),  # 12
+            ConvBNReLU(num_filters_init*16, num_filters_init*32,
+            4, 2, 1, bias=False),  # 6
+            ConvBNReLU(num_filters_init*32, num_filters_init*64,
+            6, 1, 0, bias=False),  # 1
+            nn.Conv1d(num_filters_init*64, output_size,
+            1, 1, 0, bias=True)
         )
-
-        for m in self.modules():
-            if isinstance(m, nn.Conv1d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, (nn.BatchNorm1d, nn.GroupNorm)):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         return self.cnn(x).view(x.shape[0],-1)
@@ -167,7 +145,8 @@ def create_dataloader(X, y=None, batch_size=1, shuffle=False):
         if y is None:
             yield X_batch
         else:
-            y_batch = torch.from_numpy(y[idxs_batch])
+            y_batch = y[idxs_batch]
+            y_batch = torch.from_numpy(y_batch)
             yield X_batch, y_batch
 
 def forward_by_batches(cnn, X):
@@ -194,13 +173,14 @@ def train_hmm(cnn, X, y):
 
 def evaluate_model(cnn, prior, emission, transition, X, y, pid=None):
     Y_pred = forward_by_batches(cnn, X)  # scores
+    loss = F.cross_entropy(Y_pred, torch.from_numpy(y).to(device)).item()
     Y_pred = F.softmax(Y_pred, dim=1)  # convert to probabilities
     y_pred = torch.argmax(Y_pred, dim=1)  # convert to classes
     y_pred = y_pred.cpu().numpy()  # cast to numpy array
     y_pred = utils.viterbi(y_pred, prior, emission, transition)  # HMM smoothing
     kappa = utils.cohen_kappa_score(y, y_pred, pid)
     accuracy = utils.accuracy_score(y, y_pred, pid)
-    return kappa, accuracy
+    return loss, kappa, accuracy
 
 # %%
 '''
@@ -212,15 +192,15 @@ function (we use cross entropy for multiclass classification) and optimizer
 '''
 
 # %%
-num_filters_init = 32  # initial num of filters -- see class definition
+num_filters_init = 8  # initial num of filters -- see class definition
 in_channels = 3  # num channels of the signal -- equal to 3 for our raw triaxial timeseries
 output_size = utils.NUM_CLASSES  # number of classes (sleep, sedentary, etc...)
-num_epoch = 50  # num of epochs (full loops though the training set) for SGD training
+num_epoch = 10  # num epochs (full loops though the training set) for SGD training
 lr = 1e-3  # learning rate in SGD
 batch_size = 32  # size of the mini-batch in SGD
 
 cnn = CNN(
-    output_dim=output_size,
+    output_size=output_size,
     in_channels=in_channels,
     num_filters_init=num_filters_init
 ).to(device)
@@ -238,10 +218,12 @@ Training via mini-batch gradient descent begins here. We loop through the traini
 
 # %%
 loss_history = []
-kappa_history = {'train':[], 'test':[]}
-accuracy_history = {'train':[], 'test':[]}
+kappa_history = []
+accuracy_history = []
+loss_history_train = []
 for i in tqdm(range(num_epoch)):
     dataloader = create_dataloader(X_train, y_train, batch_size, shuffle=True)
+    losses = []
     for x, target in dataloader:
         x, target = x.to(device), target.to(device)
         cnn.zero_grad()
@@ -250,29 +232,30 @@ for i in tqdm(range(num_epoch)):
         loss.backward()
         optimizer.step()
 
-        # Logging -- cross entropy loss
-        loss_history.append(loss.item())
+        # Logging -- track train loss
+        losses.append(loss.item())
 
     # -------------------------------------------------------------------------
     # Evaluate performance at the end of each epoch (full loop through the
     # training set). We could also do this at every iteration, but this would
-    # be very expensive since we are evaluating on the entire dataset.
+    # be very expensive since we are evaluating on a large dataset.
     # Aditionally, at the end of each epoch we train a Hidden Markov Model to
     # smooth the predictions of the CNN.
     # -------------------------------------------------------------------------
 
+    # Logging -- average train loss in this epoch
+    loss_history_train.append(np.mean(losses))
+
+    # Compute HMM params
     prior, emission, transition = train_hmm(cnn, X_train, y_train)
 
-    # Logging -- performance on train set
-    kappa, accuracy = evaluate_model(
-        cnn, prior, emission, transition, X_train, y_train, pid_train)
-    kappa_history['train'].append(kappa)
-    accuracy_history['train'].append(accuracy)
-    # Logging -- performance on test set
-    kappa, accuracy = evaluate_model(
-        cnn, prior, emission, transition, X_test, y_test, pid_test)
-    kappa_history['test'].append(kappa)
-    accuracy_history['test'].append(accuracy)
+    # Logging -- evalutate performance on test set
+    loss_test, kappa_test, accuracy_test = evaluate_model(
+        cnn, prior, emission, transition, X_test, y_test, pid_test
+    )
+    loss_history.append(loss_test)
+    kappa_history.append(kappa_test)
+    accuracy_history.append(accuracy_test)
 
 # %%
 ''' ###### Plot score and loss history '''
@@ -280,41 +263,47 @@ for i in tqdm(range(num_epoch)):
 # %%
 # Loss history
 fig, ax = plt.subplots()
-ax.semilogy(median_filter(loss_history, size=100))  # smooth for visualization
+ax.plot(loss_history_train, color='C0', label='train')
+ax.plot(loss_history, color='C1', label='test')
 ax.set_ylabel('loss')
-ax.set_xlabel('iteration')
+ax.set_xlabel('epoch')
+ax.legend()
 fig.show()
-fig.savefig('cnn_loss.png')
 
-# Score history
-fig, _ = plot_scores(kappa_history, xlabel='epoch', ylabel='kappa')
+# Kappa and accuracy history
+fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, sharey=True)
+ax1.plot(kappa_history, color='C2', label='test')
+ax1.set_ylabel('kappa')
+ax1.legend()
+ax2.plot(accuracy_history, color='C2', label='test')
+ax2.set_ylabel('accuracy')
+ax2.set_xlabel('epoch')
+ax2.legend()
 fig.show()
-fig.savefig('cnn_kappa_scores.png')
-fig, _ = plot_scores(accuracy_history, xlabel='epoch', ylabel='accuracy')
-fig.show()
-fig.savefig('cnn_accuracy_scores.png')
 
 # %%
 '''
 ###### Ideas
-- Implement an early stopping mechanism to select the model at its best out-of-sample performance. Do we track kappa or accuracy?
-- As an attempt to remove gravity, try detrending the signal. You can implement this in the dataloader:
+- Implement early stopping to select the model at its best out-of-sample performance. Do we track kappa or accuracy?
+- Helping the model to learn:
+    - As an attempt to remove gravity, try detrending the signal. You can implement this in the dataloader:
 
-   ```python
-   # Do this before torch.from_numpy()
-   X_batch = scipy.signal.detrend(X_batch, type='constant')
-   ```
+        ```python
+        # Do this before torch.from_numpy()
+        X_batch = scipy.signal.detrend(X_batch, type='constant')
+        ```
 
-   See [scipy.signal.detrend](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.detrend.html).
+        See [scipy.signal.detrend](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.detrend.html). More generally, consider removing the low frequencies of the signal, e.g. 0 - 0.5Hz.
 
-- Add a 4th channel containing the vector magnitude, i.e. $(x,y,z,r)$ where $r = \sqrt{x^2+y^2+z^2}$. You can implement this in the dataloader:
+    - Add a 4th channel containing the vector magnitude, i.e. $(x,y,z,r)$ where $r = \sqrt{x^2+y^2+z^2}$. You can implement this in the dataloader:
 
-   ```python
-   # Do this before torch.from_numpy()
-   X_batch = np.concatenate((X_batch, np.linalg.norm(X_batch, axis=1, keepdims=True)), axis=1)
-   ```
+        ```python
+        # Do this before torch.from_numpy()
+        X_batch = np.concatenate((X_batch, np.linalg.norm(X_batch, axis=1, keepdims=True)), axis=1)
+        ```
 
-- Consider using [spherical coordinates](https://en.wikipedia.org/wiki/Spherical_coordinate_system), or adding them as additional channels.
+    - Consider using [spherical coordinates](https://en.wikipedia.org/wiki/Spherical_coordinate_system), or adding them as additional channels.
+
 - Modify the architecture. Feel free to use recent architectures such as ResNet.
 
 ###### References
