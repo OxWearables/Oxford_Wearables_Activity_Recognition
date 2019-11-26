@@ -19,7 +19,6 @@ forest.
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage import median_filter
 from sklearn.ensemble import RandomForestClassifier
 import torch
 import torch.nn as nn
@@ -35,23 +34,12 @@ np.random.seed(42)
 torch.manual_seed(42)
 cudnn.benchmark = True
 
-# Function to plot dict of scores
-def plot_scores(scores, xlabel=None, ylabel=None):
-    fig, ax = plt.subplots()
-    for key, vals in scores.items():
-        ax.plot(vals, label=key)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    return fig, ax
-
 # %%
 ''' ###### Grab a GPU if there is one '''
 
 # %%
 if torch.cuda.is_available():
     device = torch.device("cuda")
-    torch.cuda.set_device(1)
     print("Using {} device: {}".format(device, torch.cuda.current_device()))
 else:
     device = torch.device("cpu")
@@ -61,8 +49,8 @@ else:
 ''' ###### Load dataset and hold out some instances for testing '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 print("Contents of capture24.npz:", data.files)
 X, y, pid, time = data['X_feats'], data['y'], data['pid'], data['time']
 
@@ -81,46 +69,52 @@ print("Shape of X_test:", X_test.shape)
 ''' ###### Train random forest classifier '''
 
 # %%
-random_forest = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
+random_forest = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
 random_forest.fit(X_train, y_train)
-# grab out-of-bag probability estimations -- this will be the input to the LSTM
+# Grab out-of-bag probability estimations -- this will be the input to the LSTM
 Y_train = random_forest.oob_decision_function_.astype('float32')
+# This will be the test set inputs to the LSTM
+Y_test = random_forest.predict_proba(X_test).astype('float32')
 
 # %%
 '''
 ## Smoothing the predictions with a LSTM
 In the Hidden Markov Model, smoothing of the current prediction is based on
 the current and past prediction of the random forest. Here we use a LSTM
-to smooth the current prediction based on the current and past *two*
-predictions of the random forest.
+to do the smoothing as a sequence-to-sequence prediction task: the neural
+network takes a sequence of random forest predictions and outputs the
+sequence of smoothed predictions.
 
 ###### Architecture design
-As a baseline, we use a simple one-cell LSTM.
-The input to the network is a `(3,N,5)` array corresponding to `N` sequences
-of length 3 of (current and past two) random forest outputs. The network
-output is a `(N,5)` array representing the predicted *class scores* for each
-of the `N` sequences. To obtain probabilities, we can pass each row to a
-softmax. Then to report a class label, we can pick the highest probability in
-each row. We output class scores instead of class probabilities or labels
-because the loss function that we will use operates on the scores (see
-further below).
+Our baseline is a single-layer bidirectional LSTM.
+The input to the network is a `(seq_length,N,5)` array corresponding to `N`
+sequences of `seq_length` consecutive random forest probabilistic
+predictions. The network output is a `(N,5)` array representing the predicted
+*class scores* for each of the `N` sequences. To obtain probabilities, we can
+pass each row to a softmax. Then to report a class label, we can pick the
+highest probability in each row. We output class scores instead of class
+probabilities or labels because the loss function that we will use operates
+on the scores (see further below).
 '''
 
 # %%
 class LSTM(nn.Module):
 
-    def __init__(self, input_size=5, output_size=5, hidden_size=8):
+    def __init__(self, input_size=5, output_size=5, hidden_size=1024):
         super(LSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.lstm = nn.LSTM(input_size, hidden_size)
-        self.hidden2output = nn.Linear(hidden_size, output_size)
+        self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=True)
+        self.hidden2output = nn.Linear(2*hidden_size, output_size)
 
     def forward(self, sequence):
-        _, (hidden_last, cell_last) = self.lstm(
+        hiddens, (hidden_last, cell_last) = self.lstm(
             sequence.view(len(sequence), -1, self.input_size))
-        output = self.hidden2output(hidden_last.view(-1, self.hidden_size))
+        output = self.hidden2output(
+            hiddens.view(-1, hiddens.shape[-1])).view(
+                hiddens.shape[0], hiddens.shape[1], self.output_size
+        )
         return output
 
 # %%
@@ -136,51 +130,78 @@ track the performance during training.
 '''
 
 # %%
-def create_dataloader(Y, y=None, num_prev=2, batch_size=1, shuffle=False):
+def create_dataloader(Y, y=None, seq_length=3, batch_size=1, shuffle=False,
+    no_overlap=False, drop_irregular=False):
     ''' Create a (batch) iterator over the dataset. It yields (batches of)
-    sequences of num_prev+1 consecutive rows of Y, paired with the
-    corresponding rows of y. This iterator can also be implemented with
+    sequences of consecutive rows of Y and y of length <= seq_length (can be
+    less due to the boundaries). This iterator can also be implemented with
     PyTorch's Dataset and DataLoader classes -- See
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
-    if shuffle:
-        idxs = np.random.permutation(np.arange(num_prev, len(Y)))
+    if drop_irregular:
+        n = len(Y) - seq_length + 1
     else:
-        idxs = np.arange(num_prev, len(Y))
+        n = len(Y)
+    if no_overlap:
+        idxs = np.arange(0, n, seq_length)
+    else:
+        idxs = np.arange(n)
+    if shuffle:
+        idxs = np.random.permutation(idxs)
     for i in range(0, len(idxs), batch_size):
         idxs_batch = idxs[i:i+batch_size]
-        # batch of sequences of num_prev+1 consecutive instances
-        sequence_batch = np.stack([Y[j-num_prev:j+1]for j in idxs_batch], axis=1)
+        # Separate those with irregular length -- these will be yielded one by one
+        idxs_batch_regular = np.asarray(
+            [j for j in idxs_batch if len(Y[j:j+seq_length]) == seq_length]
+        )
+        idxs_batch_irregular = np.asarray(
+            [j for j in idxs_batch if j not in idxs_batch_regular]
+        )
+        # Yield batch of sequences of regular length (=seq_length)
+        sequence_batch = np.stack([Y[j:j+seq_length] for j in idxs_batch_regular], axis=1)
         sequence_batch = torch.from_numpy(sequence_batch)
         if y is None:
             yield sequence_batch
         else:
-            y_batch = torch.from_numpy(y[idxs_batch])
+            y_batch = np.stack([y[j:j+seq_length] for j in idxs_batch_regular], axis=1)
+            y_batch = torch.from_numpy(y_batch)
             yield sequence_batch, y_batch
+        # Yield sequences of irregular length one by one
+        for j in idxs_batch_irregular:
+            sequence_batch = torch.from_numpy(Y[j:j+seq_length]).unsqueeze(1)
+            if y is None:
+                yield sequence_batch
+            else:
+                y_batch = torch.from_numpy(y[j:j+seq_length]).unsqueeze(1)
+                yield sequence_batch, y_batch
 
-def forward_by_batches(lstm, Y_in, num_prev):
+def forward_by_batches(lstm, Y_in, seq_length):
     ''' Forward pass model on a dataset. Do this by batches so that we do
     not blow up the memory. '''
     Y_out = []
     lstm.eval()
     with torch.no_grad():
-        for sequence in create_dataloader(Y_in, num_prev=num_prev, batch_size=1024, shuffle=False):  # do not shuffle here!
+        for sequence in create_dataloader(
+            Y_in, seq_length=seq_length, batch_size=1024, shuffle=False, no_overlap=True
+        ):  # do not shuffle here!
             sequence = sequence.to(device)
-            Y_out.append(lstm(sequence))
+            output = lstm(sequence)
+            Y_out.append(output)
     lstm.train()
-    Y_out = torch.cat(Y_out)
+    # Concatenate sequences in order -- need to transpose to get batch-first format
+    Y_out = torch.cat(
+        [output.transpose(1,0).reshape(-1, output.shape[-1]) for output in Y_out]
+    )
     return Y_out
 
-def evaluate_model(random_forest, lstm, num_prev, X, y, pid=None):
-    Y_pred = random_forest.predict_proba(X).astype('float32')  # rf predictions
-    Y_pred = forward_by_batches(lstm, Y_pred, num_prev)  # lstm smoothing (scores)
-    Y_pred = F.softmax(Y_pred, dim=1)  # convert to probabilities
-    y_lstm = torch.argmax(Y_pred, dim=1)  # convert to classes
+def evaluate_model(random_forest, lstm, seq_length, Y, y, pid=None):
+    Y_lstm = forward_by_batches(lstm, Y, seq_length)  # lstm smoothing (scores)
+    loss = F.cross_entropy(Y_lstm, torch.from_numpy(y).to(device)).item()
+    Y_lstm = F.softmax(Y_lstm, dim=-1)  # convert to probabilities
+    y_lstm = torch.argmax(Y_lstm, dim=-1)  # convert to classes
     y_lstm = y_lstm.cpu().numpy()  # cast to numpy array
-    # First num_prev predictions are taken directly from the random forest classifier
-    y_lstm = np.concatenate((random_forest.predict(X[:num_prev]), y_lstm))
     kappa = utils.cohen_kappa_score(y, y_lstm, pid)
     accuracy = utils.accuracy_score(y, y_lstm, pid)
-    return kappa, accuracy
+    return loss, kappa, accuracy
 
 # %%
 '''
@@ -192,10 +213,10 @@ function (we use cross entropy for multiclass classification) and optimizer
 '''
 
 # %%
-hidden_size = 8  # size of LSTM's hidden state
+hidden_size = 1024  # size of LSTM's hidden state
 input_size = output_size = utils.NUM_CLASSES  # number of classes (sleep, sedentary, etc...)
-num_prev = 2  # num of past predictions to look at -- num_prev+1 equals the sequence length
-num_epoch = 50  # num of epochs (full loops though the training set) for SGD training
+seq_length = 5  # sequence length
+num_epoch = 20  # num of epochs (full loops though the training set) for SGD training
 lr = 1e-3  # learning rate in SGD
 batch_size = 32  # size of the mini-batch in SGD
 
@@ -218,38 +239,39 @@ training set `num_epoch` times with the `dataloader` iterator.
 '''
 
 # %%
-losses = []
-kappa_history = {'train':[], 'test':[]}
-accuracy_history = {'train':[], 'test':[]}
+loss_history = []
+kappa_history = []
+accuracy_history = []
+loss_history_train = []
 for i in tqdm(range(num_epoch)):
-    dataloader = create_dataloader(Y_train, y_train, num_prev, batch_size, shuffle=True)
+    dataloader = create_dataloader(Y_train, y_train, seq_length, batch_size, shuffle=True)
+    losses = []
     for sequence, target in dataloader:
         sequence, target = sequence.to(device), target.to(device)
         lstm.zero_grad()
         output = lstm(sequence)
-        loss = loss_fn(output, target)
+        loss = loss_fn(output.view(-1,output.shape[-1]), target.view(-1))
         loss.backward()
         optimizer.step()
 
-        # Logging -- cross entropy loss
+        # Logging -- track train loss
         losses.append(loss.item())
 
     # -------------------------------------------------------------------------
     # Evaluate performance at the end of each epoch (full loop through the
     # training set). We could also do this at every iteration, but this would
-    # be very expensive since we are evaluating on the entire dataset.
+    # be very expensive since we are evaluating on a large dataset.
     # -------------------------------------------------------------------------
 
-    # Logging -- performance on train set
-    kappa, accuracy = evaluate_model(
-        random_forest, lstm, num_prev, X_train, y_train, pid_train)
-    kappa_history['train'].append(kappa)
-    accuracy_history['train'].append(accuracy)
-    # Logging -- performance on test set
-    kappa, accuracy = evaluate_model(
-        random_forest, lstm, num_prev, X_test, y_test, pid_test)
-    kappa_history['test'].append(kappa)
-    accuracy_history['test'].append(accuracy)
+    # Logging -- average train loss in this epoch
+    loss_history_train.append(np.mean(losses))
+
+    # Logging -- evaluate performance on test set
+    loss_test, kappa_test, accuracy_test = evaluate_model(
+        random_forest, lstm, seq_length, Y_test, y_test, pid_test)
+    loss_history.append(loss_test)
+    kappa_history.append(kappa_test)
+    accuracy_history.append(accuracy_test)
 
 # %%
 ''' ###### Plot score and loss history '''
@@ -257,26 +279,29 @@ for i in tqdm(range(num_epoch)):
 # %%
 # Loss history
 fig, ax = plt.subplots()
-ax.semilogy(median_filter(losses, size=100))  # smooth for visualization
+ax.plot(loss_history_train, color='C0', label='train')
+ax.plot(loss_history, color='C1', label='test')
 ax.set_ylabel('loss')
-ax.set_xlabel('iteration')
+ax.set_xlabel('epoch')
+ax.legend()
 fig.show()
-# fig.savefig('lstm_loss.png')
 
-# Score history
-fig, _ = plot_scores(kappa_history, xlabel='epoch', ylabel='kappa')
+# Kappa and accuracy history
+fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, sharey=True)
+ax1.plot(kappa_history, color='C2', label='test')
+ax1.set_ylabel('kappa')
+ax1.legend()
+ax2.plot(accuracy_history, color='C2', label='test')
+ax2.set_ylabel('accuracy')
+ax2.set_xlabel('epoch')
+ax2.legend()
 fig.show()
-# fig.savefig('lstm_cohen_scores.png')
-fig, _ = plot_scores(accuracy_history, xlabel='epoch', ylabel='accuracy')
-fig.show()
-# fig.savefig('lstm_accuracy_scores.png')
 
 # %%
 '''
 ###### Ideas
-- Implement an early stopping mechanism to select the model at its best out-of-sample performance. Do we track kappa or accuracy?
+- Implement early stopping to select the model at its best out-of-sample performance. Do we track kappa or accuracy?
 - Tune size and number of layers of the LSTM. See [module doc](https://pytorch.org/docs/stable/nn.html#lstm).
-- Instead of looking at past predictions, try looking at past and future predictions.
 
 ###### References
 - [Sequence models and LSTM in PyTorch](https://pytorch.org/tutorials/beginner/nlp/sequence_models_tutorial.html)
