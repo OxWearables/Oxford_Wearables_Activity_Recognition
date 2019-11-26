@@ -142,11 +142,11 @@ def mu_std(alist):
 
 
 class ArrayFromIdxs(object):
-    ''' Simple wrapper for X[idxs], without returning a copy. Intended for
+    ''' X[idxs] without returning a copy. Intended for
     large memmap arrays that do not fit in memory.'''
     def __init__(self, X, idxs):
         self.X = X
-        self.idxs = np.asarray(sorted(set(idxs)))
+        self.idxs = np.asarray(idxs)
         self.shape = (len(idxs), *X.shape[1:])
         self.dtype = X.dtype
 
@@ -158,7 +158,7 @@ class ArrayFromIdxs(object):
 
 
 class ArrayFromMask(ArrayFromIdxs):
-    ''' Simple wrapper for X[mask], without returning a copy. Intended for
+    ''' X[mask] without returning a copy. Intended for
     large memmap arrays that do not fit in memory.'''
     def __init__(self, X, mask):
         idxs = np.where(mask)[0]
