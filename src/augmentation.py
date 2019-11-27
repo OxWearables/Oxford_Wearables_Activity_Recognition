@@ -27,6 +27,7 @@ np.random.seed(42)
 # A function to plot the activity timeseries of a participant
 def plot_activity(X, y, pid, time, ipid=3):
     mask = pid == ipid
+    # The first hand-crafted feature X[:,0] is mean acceleration
     return utils.plot_activity(X[:,0][mask], y[mask], time[mask])
 
 # %%
@@ -36,8 +37,8 @@ To highlight the utility of data augmentation in small datasets, let us constrai
 '''
 
 # %%
-# data = np.load('capture24.npz', allow_pickle=True)
-data = np.load('capture24_small.npz', allow_pickle=True)
+data = np.load('capture24.npz', allow_pickle=True)
+# data = np.load('capture24_small.npz', allow_pickle=True)
 mask = np.isin(data['pid'], [1, 2, 3, 4, 5])  # take five participants
 X_feats, y, pid, time = \
     data['X_feats'][mask], data['y'][mask], data['pid'][mask], data['time'][mask]
@@ -57,7 +58,10 @@ print("Shape of X_test:", X_test.shape)
 # %%
 ''' ###### Baseline
 
-Train the random forest and evaluate on the held out participants '''
+Train the random forest and evaluate on the held out participants
+
+*Note: this takes a few minutes*
+'''
 
 # %%
 # Training
@@ -84,9 +88,10 @@ Let's generate a pseudo-test set simulating this scenario: '''
 
 # %%
 # First load the raw triaxial data to perform the rotation on it
-# X_raw = utils.load_raw('X_raw.dat')
-X_raw = np.load('X_raw_small.npy')
-X_raw = utils.ArrayFromMask(X_raw, mask)  # grab the five participants
+X_raw = np.load('X_raw.npy', mmap_mode='r')
+# X_raw = np.load('X_raw_small.npy')
+# X_raw = utils.ArrayFromMask(X_raw, mask)  # grab the five participants
+X_raw = X_raw[mask]  # grab the five participants
 
 # Initialize feature extractor -- this needs to be done only once
 extractor = utils.Extractor()
@@ -157,7 +162,10 @@ y_train = np.concatenate((y_train, y_train_rot))
 print("Shape of new augmented X_train:", X_train.shape)
 
 # %%
-''' ###### Re-train the model on the augmented training set '''
+''' ###### Re-train the model on the augmented training set
+
+*Note: this takes a few minutes*
+'''
 
 # %%
 classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
