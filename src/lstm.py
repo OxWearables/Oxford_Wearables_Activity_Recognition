@@ -89,12 +89,14 @@ sequence of smoothed predictions.
 Our baseline is a single-layer bidirectional LSTM.
 The input to the network is a `(seq_length,N,5)` array corresponding to `N`
 sequences of `seq_length` consecutive random forest probabilistic
-predictions. The network output is a `(N,5)` array representing the predicted
-*class scores* for each of the `N` sequences. To obtain probabilities, we can
-pass each row to a softmax. Then to report a class label, we can pick the
-highest probability in each row. We output class scores instead of class
-probabilities or labels because the loss function that we will use operates
-on the scores (see further below).
+predictions.
+The output of the network is a `(seq_length,N,5)` array corresponding to
+the smoothed predictions, represented as *unnormalized scores*.
+To obtain probabilities, we can pass each row of the last axis to a softmax.
+Then to report a class label, we can pick the highest probability in each
+row. We output class scores instead of class probabilities or labels because
+the loss function that we will use operates on the scores
+[(torch.CrossEntropyLoss)](https://pytorch.org/docs/stable/nn.html#crossentropyloss).
 '''
 
 # %%
@@ -130,20 +132,20 @@ track the performance during training.
 '''
 
 # %%
-def create_dataloader(Y, y=None, seq_length=3, batch_size=1, shuffle=False,
-    no_overlap=False, drop_irregular=False):
+def create_dataloader(Y, y=None, seq_length=5, batch_size=1, shuffle=False, eval_mode=False):
     ''' Create a (batch) iterator over the dataset. It yields (batches of)
-    sequences of consecutive rows of Y and y of length <= seq_length (can be
-    less due to the boundaries). This iterator can also be implemented with
-    PyTorch's Dataset and DataLoader classes -- See
+    sequences of consecutive rows of `Y` and `y` of length `seq_length` (can
+    be less than `seq_length` in `eval_mode=True`). This iterator can also be
+    implemented with PyTorch's Dataset and DataLoader classes -- See
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
-    if drop_irregular:
-        n = len(Y) - seq_length + 1
-    else:
+    if eval_mode:
+        # In order to reuse this loader in evaluation/prediction mode, we
+        # provide non-overlapping segments, as well as the trailing segments
+        # that can be shorter than seq_length.
         n = len(Y)
-    if no_overlap:
         idxs = np.arange(0, n, seq_length)
     else:
+        n = len(Y) - seq_length + 1
         idxs = np.arange(n)
     if shuffle:
         idxs = np.random.permutation(idxs)
@@ -165,7 +167,7 @@ def create_dataloader(Y, y=None, seq_length=3, batch_size=1, shuffle=False,
             y_batch = np.stack([y[j:j+seq_length] for j in idxs_batch_regular], axis=1)
             y_batch = torch.from_numpy(y_batch)
             yield sequence_batch, y_batch
-        # Yield sequences of irregular length one by one
+        # Yield sequences of irregular length uno por uno
         for j in idxs_batch_irregular:
             sequence_batch = torch.from_numpy(Y[j:j+seq_length]).unsqueeze(1)
             if y is None:
@@ -174,6 +176,7 @@ def create_dataloader(Y, y=None, seq_length=3, batch_size=1, shuffle=False,
                 y_batch = torch.from_numpy(y[j:j+seq_length]).unsqueeze(1)
                 yield sequence_batch, y_batch
 
+
 def forward_by_batches(lstm, Y_in, seq_length):
     ''' Forward pass model on a dataset. Do this by batches so that we do
     not blow up the memory. '''
@@ -181,7 +184,7 @@ def forward_by_batches(lstm, Y_in, seq_length):
     lstm.eval()
     with torch.no_grad():
         for sequence in create_dataloader(
-            Y_in, seq_length=seq_length, batch_size=1024, shuffle=False, no_overlap=True
+            Y_in, seq_length=seq_length, batch_size=1024, shuffle=False, eval_mode=True
         ):  # do not shuffle here!
             sequence = sequence.to(device)
             output = lstm(sequence)
@@ -192,6 +195,7 @@ def forward_by_batches(lstm, Y_in, seq_length):
         [output.transpose(1,0).reshape(-1, output.shape[-1]) for output in Y_out]
     )
     return Y_out
+
 
 def evaluate_model(random_forest, lstm, seq_length, Y, y, pid=None):
     Y_lstm = forward_by_batches(lstm, Y, seq_length)  # lstm smoothing (scores)
@@ -214,7 +218,7 @@ function (we use cross entropy for multiclass classification) and optimizer
 
 # %%
 hidden_size = 1024  # size of LSTM's hidden state
-input_size = output_size = utils.NUM_CLASSES  # number of classes (sleep, sedentary, etc...)
+input_size = output_size = 5  # number of classes (sleep, sedentary, etc...)
 seq_length = 5  # sequence length
 num_epoch = 20  # num of epochs (full loops though the training set) for SGD training
 lr = 1e-3  # learning rate in SGD
