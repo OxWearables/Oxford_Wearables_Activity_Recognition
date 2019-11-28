@@ -18,7 +18,7 @@ The key is to find *invariances* in the data that are applicable for our learnin
 # %%
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import utils  # contains helper functions for this workshop -- check utils.py
 
 # For reproducibility
@@ -39,7 +39,7 @@ To highlight the utility of data augmentation in small datasets, let us constrai
 # %%
 data = np.load('capture24.npz', allow_pickle=True)
 # data = np.load('capture24_small.npz', allow_pickle=True)
-mask = np.isin(data['pid'], [1, 2, 3, 4, 5])  # take five participants
+mask = np.isin(data['pid'], [1, 2, 3, 4, 5])  # take only five participants
 X_feats, y, pid, time = \
     data['X_feats'][mask], data['y'][mask], data['pid'][mask], data['time'][mask]
 print("Contents of capture24.npz:", data.files)
@@ -65,7 +65,7 @@ Train the random forest and evaluate on the held out participants
 
 # %%
 # Training
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
+classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
 classifier.fit(X_train, y_train)
 Y_oob = classifier.oob_decision_function_
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)
@@ -90,8 +90,10 @@ Let's generate a pseudo-test set simulating this scenario: '''
 # First load the raw triaxial data to perform the rotation on it
 X_raw = np.load('X_raw.npy', mmap_mode='r')
 # X_raw = np.load('X_raw_small.npy')
-# X_raw = utils.ArrayFromMask(X_raw, mask)  # grab the five participants
-X_raw = X_raw[mask]  # grab the five participants
+# X_raw[mask_train] and X_raw[mask_test] if you like to live dangerously
+X_raw = utils.ArrayFromMask(X_raw, mask)  # grab the five participants
+X_raw_train = utils.ArrayFromMask(X_raw, mask_train)
+X_raw_test = utils.ArrayFromMask(X_raw, mask_test)
 
 # Initialize feature extractor -- this needs to be done only once
 extractor = utils.Extractor()
@@ -99,13 +101,12 @@ extractor = utils.Extractor()
 print("Extracting features on pseudo-test set...")
 X_test_rot = np.empty_like(X_test)
 y_test_rot = y_test.copy()
-idxs_test = np.where(mask_test)[0]
-for i, idx in tqdm(enumerate(idxs_test)):
+for i in tqdm(range(X_raw_test.shape[0])):
     # Rotate instance around z-axis and extract features
-    xyz = X_raw[idx].copy()
-    xyz[0,:] *= -1
-    xyz[1,:] *= -1
-    X_test_rot[i] = extractor.extract(xyz)
+    x = X_raw_test[i].copy()
+    x[0,:] *= -1
+    x[1,:] *= -1
+    X_test_rot[i] = extractor.extract(x)
 
 # %%
 ''' ###### How does the baseline model perform on the pseudo-set? '''
@@ -148,13 +149,12 @@ We can incorporate the desired invariance by simply augmenting our training set 
 print("\nExtracting features on pseudo-training set...")
 X_train_rot = np.empty_like(X_train)
 y_train_rot = y_train.copy()
-idxs_train = np.where(mask_train)[0]
-for i, idx in tqdm(enumerate(idxs_train)):
+for i in tqdm(range(X_raw_train.shape[0])):
     # Rotate instance around z-axis and extract features
-    xyz = X_raw[idx].copy()
-    xyz[0,:] *= -1
-    xyz[1,:] *= -1
-    X_train_rot[i] = extractor.extract(xyz)
+    x = X_raw_train[i].copy()
+    x[0,:] *= -1
+    x[1,:] *= -1
+    X_train_rot[i] = extractor.extract(x)
 
 # Add in the "new data" to training set
 X_train = np.concatenate((X_train, X_train_rot))
@@ -168,7 +168,7 @@ print("Shape of new augmented X_train:", X_train.shape)
 '''
 
 # %%
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=2)
+classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
 classifier.fit(X_train, y_train)
 Y_oob = classifier.oob_decision_function_
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)
