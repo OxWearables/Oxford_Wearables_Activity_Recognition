@@ -84,14 +84,20 @@ What would our performance be if our two left-out participants happened to wear 
 For example: Suppose that all our training participants wore the device on their right hand, then how would our model perform on participants that wore the device on their left hand?
 This scenario corresponds to a 180 degrees rotation around the z-axis:
 <img src="ax3_orientation.jpg" width="400"/>
-Let's generate a pseudo-test set simulating this scenario: '''
+Let's generate a pseudo-test set simulating this scenario. In the following,
+we first load the raw triaxial accelerometer data so that we can perform the
+rotation on it, then we use our utility function to extract hand-crafted features (see
+`utils.Extractor`) on the rotated raw data.
+
+'''
 
 # %%
-# First load the raw triaxial data to perform the rotation on it
+# Load the raw triaxial data to perform the rotation on it
 X_raw = np.load('X_raw.npy', mmap_mode='r')
 # X_raw = np.load('X_raw_small.npy')
+# Grab the five participants and hold out those for testing
 # X_raw[mask_train] and X_raw[mask_test] if you like to live dangerously
-X_raw = utils.ArrayFromMask(X_raw, mask)  # grab the five participants
+X_raw = utils.ArrayFromMask(X_raw, mask)
 X_raw_train = utils.ArrayFromMask(X_raw, mask_train)
 X_raw_test = utils.ArrayFromMask(X_raw, mask_test)
 
