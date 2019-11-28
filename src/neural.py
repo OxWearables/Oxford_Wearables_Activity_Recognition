@@ -6,7 +6,12 @@
 
 *This section assumes familiarity with [PyTorch](https://pytorch.org/)*
 
-In this section, instead of using the hand-crafted features, we use a neural network on the raw accelerometer measurements so that we let the neural network automatically learn relevant features for classification.
+Crafting useful and meaningful features is one of the most crucial parts of
+learning. It is also one of the most difficult and time consuming. So far we
+trained a random forest using features borrowed from various sources in the
+literature.
+In this section, we look at using a neural network to automatically craft
+relevant features from the raw accelerometer data for the learning task.
 
 ###### Setup
 '''
@@ -67,8 +72,16 @@ print("Shape of X_test", X_test.shape)
 '''
 ###### Architecture design
 
-As a baseline model, we use a convolutional neural network (CNN) with a typical pyramid-like structure. The input to the network is a `(N,3,3000)` array, corresponding to `N` instances of raw triaxial measurements of activity. The output of the network is a `(N,5)` array representing predicted *class scores* for each instance.
-To obtain probabilities, we can pass each row to a softmax. Then to report a class label, we can pick the highest probability in each row. We output class scores instead of class probabilities or labels because the loss function that we will use operates on the scores (see further below).
+As a baseline model, we use a convolutional neural network (CNN) with a
+typical pyramid-like structure. The input to the network is a `(N,3,3000)`
+array, corresponding to `N` instances of raw triaxial measurements of
+activity.
+The output of the network is a `(N,5)` array, each row containing predicted
+*unnormalized class scores*.
+To obtain probabilities, we can pass each row to a softmax. Then to report a
+class label, we can pick the highest probability in each row. We output class
+scores instead of class probabilities or labels because the loss function
+that we will use operates on the scores [(torch.CrossEntropyLoss)](https://pytorch.org/docs/stable/nn.html#crossentropyloss).
 '''
 
 # %%
@@ -98,19 +111,19 @@ class CNN(nn.Module):
 
         self.cnn = nn.Sequential(
             ConvBNReLU(in_channels, num_filters_init,
-            8, 4, 2, bias=False),  # 750
+            8, 4, 2, bias=False),  # 1500 -> 750
             ConvBNReLU(num_filters_init, num_filters_init*2,
-            6, 4, 2, bias=False),  # 188
+            6, 4, 2, bias=False),  # 750 -> 188
             ConvBNReLU(num_filters_init*2, num_filters_init*4,
-            8, 4, 2, bias=False),  # 47
+            8, 4, 2, bias=False),  # 188 -> 47
             ConvBNReLU(num_filters_init*4, num_filters_init*8,
-            3, 2, 1, bias=False),  # 24
+            3, 2, 1, bias=False),  # 47 -> 24
             ConvBNReLU(num_filters_init*8, num_filters_init*16,
-            4, 2, 1, bias=False),  # 12
+            4, 2, 1, bias=False),  # 24 -> 12
             ConvBNReLU(num_filters_init*16, num_filters_init*32,
-            4, 2, 1, bias=False),  # 6
+            4, 2, 1, bias=False),  # 12 -> 6
             ConvBNReLU(num_filters_init*32, num_filters_init*64,
-            6, 1, 0, bias=False),  # 1
+            6, 1, 0, bias=False),  # 6 -> 1
             nn.Conv1d(num_filters_init*64, output_size,
             1, 1, 0, bias=True)
         )
@@ -149,6 +162,7 @@ def create_dataloader(X, y=None, batch_size=1, shuffle=False):
             y_batch = torch.from_numpy(y_batch)
             yield X_batch, y_batch
 
+
 def forward_by_batches(cnn, X):
     ''' Forward pass model on a dataset. Do this by batches so that we do
     not blow up the memory. '''
@@ -162,6 +176,7 @@ def forward_by_batches(cnn, X):
     Y = torch.cat(Y)
     return Y
 
+
 def train_hmm(cnn, X, y):
     ''' Use the probabilistic predictions of the CNN to compute the Hidden
     Markov Model parameters '''
@@ -170,6 +185,7 @@ def train_hmm(cnn, X, y):
     Y_pred = Y_pred.cpu().numpy()  # cast to numpy array
     prior, emission, transition = utils.train_hmm(Y_pred, y)
     return prior, emission, transition
+
 
 def evaluate_model(cnn, prior, emission, transition, X, y, pid=None):
     Y_pred = forward_by_batches(cnn, X)  # scores
@@ -194,8 +210,8 @@ function (we use cross entropy for multiclass classification) and optimizer
 # %%
 num_filters_init = 8  # initial num of filters -- see class definition
 in_channels = 3  # num channels of the signal -- equal to 3 for our raw triaxial timeseries
-output_size = utils.NUM_CLASSES  # number of classes (sleep, sedentary, etc...)
-num_epoch = 10  # num epochs (full loops though the training set) for SGD training
+output_size = 5  # number of classes (sleep, sedentary, etc...)
+num_epoch = 20  # num epochs (full loops though the training set) for SGD training
 lr = 1e-3  # learning rate in SGD
 batch_size = 32  # size of the mini-batch in SGD
 
