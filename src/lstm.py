@@ -25,8 +25,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-# from tqdm import tqdm
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import utils
 
 # For reproducibility

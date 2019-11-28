@@ -24,8 +24,7 @@ performance.
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
-# from tqdm import tqdm
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 import utils
 
 # For reproducibility
