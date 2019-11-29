@@ -228,10 +228,10 @@ model.
 
 - Tune hyperparameters of the random forest (`n_estimators`, `max_depth`,
 `criterion`, etc.). See [RandomForestClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html).
-- Tune the hyperparameters of the logistic regression (`penalty`, `C`, `max_iter`, etc.). See [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html).
-- How would you select the best set of hyperparameters for a model?
+- How would you select the best set of hyperparameters?
+- Which class is harder to classify for the model?
+- Given that the dataset is highly unbalanced, how informative is the accuracy score?
 - Can we improve performance by balancing the dataset?
-- Given that the dataset is highly unbalanced, do we focus on accuracy or kappa score?
 
 ###### References
 - [A nice lecture on validation](https://www.youtube.com/watch?v=o7zzaKd0Lkk&hd=1)
