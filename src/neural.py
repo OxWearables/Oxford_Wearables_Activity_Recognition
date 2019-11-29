@@ -6,8 +6,8 @@
 
 *This section assumes familiarity with [PyTorch](https://pytorch.org/)*
 
-Crafting useful and meaningful features is one of the most crucial parts of
-learning. It is also one of the most difficult and time consuming. So far we
+Crafting effective features is one of the most crucial parts of
+machine learning. It is also one of the most difficult and time consuming. So far we
 trained a random forest using features borrowed from various sources in the
 literature.
 In this section, we look at using a neural network to automatically craft
