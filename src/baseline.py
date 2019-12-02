@@ -17,40 +17,10 @@ import numpy as np
 from scipy.stats import mode
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-import sklearn.metrics as metrics
 import utils  # contains helper functions for this workshop -- check utils.py
 
 # For reproducibility
 np.random.seed(42)
-
-def compute_scores(y_true, y_pred):
-    ''' Compute a bunch of scoring functions '''
-    confusion = metrics.confusion_matrix(y_true, y_pred)
-    per_class_recall = metrics.recall_score(y_true, y_pred, average=None)
-    accuracy = metrics.accuracy_score(y_true, y_pred)
-    balanced_acuracy = metrics.balanced_accuracy_score(y_true, y_pred)
-    kappa = metrics.cohen_kappa_score(y_true, y_pred)
-    return {
-        'confusion':confusion,
-        'per_class_recall':per_class_recall,
-        'accuracy': accuracy,
-        'balanced_accuracy': balanced_acuracy,
-        'kappa':kappa,
-    }
-
-def print_scores(scores):
-    print("Accuracy score:", scores['accuracy'])
-    print("Balanced accuracy score:", scores['balanced_accuracy'])
-    print("Cohen kappa score:", scores['kappa'])
-    print("\nPer-class recall scores:")
-    print(
-        "sleep      : {}\n"
-        "sedentary  : {}\n"
-        "tasks-light: {}\n"
-        "walking    : {}\n"
-        "moderate   : {}".format(*scores['per_class_recall'])
-    )
-    print("\nConfusion matrix:\n", scores['confusion'])
 
 # %%
 ''' ###### Load dataset and hold out some instances for testing '''
@@ -90,7 +60,7 @@ classifier.fit(X_train, y_train)
 # %%
 y_test_pred = classifier.predict(X_test)
 print("\n--- Random forest performance ---")
-print_scores(compute_scores(y_test, y_test_pred))
+utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 
 # %%
 '''
@@ -148,7 +118,7 @@ y_test_modefilt = mode(
     axis=0)[0].ravel()
 y_test_modefilt = np.concatenate(([y_test_pred[0]], y_test_modefilt, [y_test_pred[-1]]))
 print("\n--- Random forest performance with mode filtering ---")
-print_scores(compute_scores(y_test, y_test_modefilt))
+utils.print_scores(utils.compute_scores(y_test, y_test_modefilt))
 
 fig, _ = utils.plot_activity(
     X_test[pid_test==3][:,0], y_test_modefilt[pid_test==3], time_test[pid_test==3]
@@ -178,7 +148,7 @@ Y_train_pred = classifier.predict_proba(X_train)  # probabilistic predictions --
 prior, emission, transition = utils.train_hmm(Y_train_pred, y_train)  # HMM training step
 y_test_hmm = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (in-bag estimate) ---")
-print_scores(compute_scores(y_test, y_test_hmm))
+utils.print_scores(utils.compute_scores(y_test, y_test_hmm))
 
 fig, _ = utils.plot_activity(
     X_test[pid_test==3][:,0], y_test_hmm[pid_test==3], time_test[pid_test==3]
@@ -197,7 +167,7 @@ Y_oob = classifier.oob_decision_function_  # probabilistic predictions -- this i
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)  # HMM training step
 y_test_hmm_oob = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (out-of-bag estimate) ---")
-print_scores(compute_scores(y_test, y_test_hmm_oob))
+utils.print_scores(utils.compute_scores(y_test, y_test_hmm_oob))
 
 fig, _ = utils.plot_activity(
     X_test[pid_test==3][:,0], y_test_hmm_oob[pid_test==3], time_test[pid_test==3]
@@ -217,7 +187,7 @@ classifier_LR = LogisticRegression(
 classifier_LR.fit(X_train, y_train)
 y_test_LR = classifier_LR.predict(X_test)
 print("\n--- Logistic regression performance ---")
-print_scores(compute_scores(y_test, y_test_LR))
+utils.print_scores(utils.compute_scores(y_test, y_test_LR))
 
 fig, _ = utils.plot_activity(
     X_test[pid_test==3][:,0], y_test_LR[pid_test==3], time_test[pid_test==3]
@@ -234,7 +204,7 @@ Y_train_LR_pred = classifier_LR.predict_proba(X_train)  # probabilistic predicti
 prior, emission, transition = utils.train_hmm(Y_train_LR_pred, y_train)  # HMM training step
 y_test_LR_hmm = utils.viterbi(y_test_LR, prior, transition, emission)  # smoothing
 print("\n--- Logistic regression performance with HMM smoothing ---")
-print_scores(compute_scores(y_test, y_test_LR_hmm))
+utils.print_scores(utils.compute_scores(y_test, y_test_LR_hmm))
 
 fig, _ = utils.plot_activity(
     X_test[pid_test==3][:,0], y_test_LR_hmm[pid_test==3], time_test[pid_test==3]

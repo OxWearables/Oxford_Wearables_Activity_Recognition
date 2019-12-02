@@ -75,6 +75,37 @@ def viterbi(y_pred, prior, transition, emission):
     return viterbi_path
 
 
+def compute_scores(y_true, y_pred):
+    ''' Compute a bunch of scoring functions '''
+    confusion = metrics.confusion_matrix(y_true, y_pred)
+    per_class_recall = metrics.recall_score(y_true, y_pred, average=None)
+    accuracy = metrics.accuracy_score(y_true, y_pred)
+    balanced_acuracy = metrics.balanced_accuracy_score(y_true, y_pred)
+    kappa = metrics.cohen_kappa_score(y_true, y_pred)
+    return {
+        'confusion':confusion,
+        'per_class_recall':per_class_recall,
+        'accuracy': accuracy,
+        'balanced_accuracy': balanced_acuracy,
+        'kappa':kappa,
+    }
+
+
+def print_scores(scores):
+    print("Accuracy score:", scores['accuracy'])
+    print("Balanced accuracy score:", scores['balanced_accuracy'])
+    print("Cohen kappa score:", scores['kappa'])
+    print("\nPer-class recall scores:")
+    print(
+        "sleep      : {}\n"
+        "sedentary  : {}\n"
+        "tasks-light: {}\n"
+        "walking    : {}\n"
+        "moderate   : {}".format(*scores['per_class_recall'])
+    )
+    print("\nConfusion matrix:\n", scores['confusion'])
+
+
 def cohen_kappa_score(y_true, y_pred, pid=None):
     """ Compute kappa score accounting for groups (given by pid) """
     if pid is None:
