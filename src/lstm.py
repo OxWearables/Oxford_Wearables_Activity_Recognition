@@ -202,9 +202,8 @@ def evaluate_model(random_forest, lstm, seq_length, Y, y, pid=None):
     Y_lstm = F.softmax(Y_lstm, dim=-1)  # convert to probabilities
     y_lstm = torch.argmax(Y_lstm, dim=-1)  # convert to classes
     y_lstm = y_lstm.cpu().numpy()  # cast to numpy array
-    kappa = utils.cohen_kappa_score(y, y_lstm, pid)
-    accuracy = utils.accuracy_score(y, y_lstm, pid)
-    return loss, kappa, accuracy
+    scores = utils.compute_scores(y, y_lstm)
+    return loss, scores
 
 # %%
 '''
@@ -242,9 +241,10 @@ training set `num_epoch` times with the `dataloader` iterator.
 '''
 
 # %%
-loss_history = []
-kappa_history = []
 accuracy_history = []
+balanced_accuracy_history = []
+kappa_history = []
+loss_history = []
 loss_history_train = []
 for i in tqdm(range(num_epoch)):
     dataloader = create_dataloader(Y_train, y_train, seq_length, batch_size, shuffle=True)
@@ -270,11 +270,12 @@ for i in tqdm(range(num_epoch)):
     loss_history_train.append(np.mean(losses))
 
     # Logging -- evaluate performance on test set
-    loss_test, kappa_test, accuracy_test = evaluate_model(
+    loss_test, scores_test = evaluate_model(
         random_forest, lstm, seq_length, Y_test, y_test, pid_test)
     loss_history.append(loss_test)
-    kappa_history.append(kappa_test)
-    accuracy_history.append(accuracy_test)
+    accuracy_history.append(scores_test['accuracy'])
+    balanced_accuracy_history.append(scores_test['balanced_accuracy'])
+    kappa_history.append(scores_test['kappa'])
 
 # %%
 ''' ###### Plot score and loss history '''
@@ -289,16 +290,18 @@ ax.set_xlabel('epoch')
 ax.legend()
 fig.show()
 
-# Kappa and accuracy history
-fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, sharey=True)
-ax1.plot(kappa_history, color='C2', label='test')
-ax1.set_ylabel('kappa')
-ax1.legend()
-ax2.plot(accuracy_history, color='C2', label='test')
-ax2.set_ylabel('accuracy')
-ax2.set_xlabel('epoch')
-ax2.legend()
+# Scores history
+fig, ax = plt.subplots()
+ax.plot(accuracy_history, label='accuracy')
+ax.plot(balanced_accuracy_history, label='balanced accuracy')
+ax.plot(kappa_history, label='kappa')
+ax.set_ylabel('score')
+ax.set_xlabel('epoch')
+ax.legend()
 fig.show()
+
+# Scores details -- last epoch
+utils.print_scores(scores_test)
 
 # %%
 '''
