@@ -1,4 +1,4 @@
-''' Example code for submission: RF + LSTM
+''' Template for submission: RF + LSTM
 You would need to provide this code + `your_random_forest_model.joblib` +
 `your_lstm_model.pth`
 '''
@@ -45,25 +45,25 @@ def predict(X):
     Y = F.softmax(Y, dim=1)  # convert to probabilities
     y = torch.argmax(Y, dim=1)  # convert to classes
     y = y.numpy()  # cast to numpy array
-    # First num_prev predictions are taken directly from the random forest classifier
-    NUM_PREV = 2
-    y = np.concatenate((random_forest.predict(X_feats[:NUM_PREV]), y))
 
     return y
 
 
 class LSTM(nn.Module):
-    ''' Simple LSTM '''
-    def __init__(self, input_size=5, output_size=5, hidden_size=8):
+    ''' Single-layer bidirectional LSTM '''
+    def __init__(self, input_size=5, output_size=5, hidden_size=1024):
         super(LSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.lstm = nn.LSTM(input_size, hidden_size)
-        self.hidden2output = nn.Linear(hidden_size, output_size)
+        self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=True)
+        self.hidden2output = nn.Linear(2*hidden_size, output_size)
 
     def forward(self, sequence):
-        _, (hidden_last, cell_last) = self.lstm(
+        hiddens, (hidden_last, cell_last) = self.lstm(
             sequence.view(len(sequence), -1, self.input_size))
-        output = self.hidden2output(hidden_last.view(-1, self.hidden_size))
+        output = self.hidden2output(
+            hiddens.view(-1, hiddens.shape[-1])).view(
+                hiddens.shape[0], hiddens.shape[1], self.output_size
+        )
         return output
