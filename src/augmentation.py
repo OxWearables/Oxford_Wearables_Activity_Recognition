@@ -24,12 +24,6 @@ import utils  # contains helper functions for this workshop -- check utils.py
 # For reproducibility
 np.random.seed(42)
 
-# A function to plot the activity timeseries of a participant
-def plot_activity(X, y, pid, time, ipid=3):
-    mask = pid == ipid
-    # The first hand-crafted feature X[:,0] is mean acceleration
-    return utils.plot_activity(X[:,0][mask], y[mask], time[mask])
-
 # %%
 ''' ###### Load dataset and hold out some instances for testing
 
@@ -73,8 +67,7 @@ prior, emission, transition = utils.train_hmm(Y_oob, y_train)
 # Testing
 y_test_pred = utils.viterbi(classifier.predict(X_test), prior, transition, emission)
 print("\n--- Baseline performance ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_pred, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_pred, pid_test))
+utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 
 # %%
 '''
@@ -121,8 +114,7 @@ for i in tqdm(range(X_raw_test.shape[0])):
 y_test_rot_pred = utils.viterbi(
     classifier.predict(X_test_rot), prior, transition, emission)
 print("\n--- Performance of baseline model on pseudo-test set ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test_rot, y_test_rot_pred, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test_rot, y_test_rot_pred, pid_test))
+utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
 
 # %%
 '''
@@ -131,11 +123,15 @@ Let's visualize the predicted activities for participant #3 and the pseudo-parti
 '''
 
 # %%
-fig, _ = plot_activity(X_test, y_test_pred, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('participant #3', fontsize='small')
 fig.show()
 
-fig, _ = plot_activity(X_test_rot, y_test_rot_pred, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test_rot[pid_test==3][:,0], y_test_rot_pred[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('pseudo-participant #3', fontsize='small')
 fig.show()
 
@@ -185,19 +181,21 @@ prior, emission, transition = utils.train_hmm(Y_oob, y_train)
 # %%
 print("\n--- Performance of re-trained model on the original test set ---")
 y_test_pred = utils.viterbi(classifier.predict(X_test), prior, transition, emission)
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_pred, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_pred, pid_test))
+utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 
 print("\n--- Performance of re-trained model on the pseudo-test set ---")
 y_test_rot_pred = utils.viterbi(classifier.predict(X_test_rot), prior, transition, emission)
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test_rot, y_test_rot_pred, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test_rot, y_test_rot_pred, pid_test))
+utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
 
-fig, _ = plot_activity(X_test, y_test_pred, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('participant #3', fontsize='small')
 fig.show()
 
-fig, _ = plot_activity(X_test_rot, y_test_rot_pred, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test_rot[pid_test==3][:,0], y_test_rot_pred[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('pseudo-participant #3', fontsize='small')
 fig.show()
 
