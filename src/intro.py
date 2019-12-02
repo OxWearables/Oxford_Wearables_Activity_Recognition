@@ -187,7 +187,7 @@ print(np.unique(y, return_counts=True))
 
 # %%
 '''
-As seen, there is barely any "tasks-light" activities (category 2). To aid the
+As seen, there is barely any "tasks-light" activities. To aid the
 visualization, try balancing the activities to be scatter-plotted.
 
 ###### References
