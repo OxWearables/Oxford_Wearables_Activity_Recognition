@@ -100,7 +100,7 @@ the loss function that we will use operates on the scores
 
 # %%
 class LSTM(nn.Module):
-
+    ''' Single-layer bidirectional LSTM '''
     def __init__(self, input_size=5, output_size=5, hidden_size=1024):
         super(LSTM, self).__init__()
         self.input_size = input_size
