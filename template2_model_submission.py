@@ -67,3 +67,10 @@ class LSTM(nn.Module):
                 hiddens.shape[0], hiddens.shape[1], self.output_size
         )
         return output
+
+
+if __name__ == "__main__":
+    ''' Example code to deploy the model '''
+    X = np.load('X_raw_test.npy')
+    y = predict(X)
+    np.save('my_predictions_for_2020.npy', y)

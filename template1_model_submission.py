@@ -1,4 +1,4 @@
-''' Example code for submission: CNN + HMM
+''' Template for submission: CNN + HMM
 You would need to provide this code + `your_cnn_model.pth` +
 `your_hmm_model.npz`
 '''
@@ -51,3 +51,10 @@ class CNN(nn.Module):
 
     def forward(self, x):
         return self.main(x).view(x.shape[0],-1)
+
+
+if __name__ == "__main__":
+    ''' Example code to deploy the model '''
+    X = np.load('X_raw_test.npy')
+    y = predict(X)
+    np.save('my_predictions_for_2020.npy', y)
