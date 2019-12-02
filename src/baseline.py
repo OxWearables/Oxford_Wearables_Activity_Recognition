@@ -160,7 +160,7 @@ print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_hmm_oob, pid_
 print("Accuracy score:", utils.accuracy_score(y_test, y_test_hmm_oob, pid_test))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_test_hmm_oob))
 
-fig, _ = plot_activity(X_test, y_test_hmm, pid_test, time_test, ipid=3)
+fig, _ = plot_activity(X_test, y_test_hmm_oob, pid_test, time_test, ipid=3)
 fig.show()
 
 # %%
