@@ -76,7 +76,7 @@ utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 What would our performance be if our two left-out participants happened to wear the device with a different orientation?
 For example: Suppose that all our training participants wore the device on their right hand, then how would our model perform on participants that wore the device on their left hand?
 This scenario corresponds to a 180 degrees rotation around the z-axis:
-<img src="ax3_orientation.jpg" width="400"/>
+<img src="wrist_accelerometer.jpg" width="400"/>
 Let's generate a pseudo-test set simulating this scenario. In the following,
 we first load the raw triaxial accelerometer data so that we can perform the
 rotation on it, then we use our utility function to extract hand-crafted features (see
