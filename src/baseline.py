@@ -17,17 +17,40 @@ import numpy as np
 from scipy.stats import mode
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix
+import sklearn.metrics as metrics
 import utils  # contains helper functions for this workshop -- check utils.py
 
 # For reproducibility
 np.random.seed(42)
 
-# A function to plot the activity timeseries of a participant
-def plot_activity(X, y, pid, time, ipid=3):
-    mask = pid == ipid
-    # The first hand-crafted feature X[:,0] is mean acceleration
-    return utils.plot_activity(X[:,0][mask], y[mask], time[mask])
+def compute_scores(y_true, y_pred):
+    ''' Compute a bunch of scoring functions '''
+    confusion = metrics.confusion_matrix(y_true, y_pred)
+    per_class_recall = metrics.recall_score(y_true, y_pred, average=None)
+    accuracy = metrics.accuracy_score(y_true, y_pred)
+    balanced_acuracy = metrics.balanced_accuracy_score(y_true, y_pred)
+    kappa = metrics.cohen_kappa_score(y_true, y_pred)
+    return {
+        'confusion':confusion,
+        'per_class_recall':per_class_recall,
+        'accuracy': accuracy,
+        'balanced_accuracy': balanced_acuracy,
+        'kappa':kappa,
+    }
+
+def print_scores(scores):
+    print("Accuracy score:", scores['accuracy'])
+    print("Balanced accuracy score:", scores['balanced_accuracy'])
+    print("Cohen kappa score:", scores['kappa'])
+    print("\nPer-class recall scores:")
+    print(
+        "sleep      : {}\n"
+        "sedentary  : {}\n"
+        "tasks-light: {}\n"
+        "walking    : {}\n"
+        "moderate   : {}".format(*scores['per_class_recall'])
+    )
+    print("\nConfusion matrix:\n", scores['confusion'])
 
 # %%
 ''' ###### Load dataset and hold out some instances for testing '''
@@ -67,22 +90,41 @@ classifier.fit(X_train, y_train)
 # %%
 y_test_pred = classifier.predict(X_test)
 print("\n--- Random forest performance ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_pred, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_pred, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_pred))
+print_scores(compute_scores(y_test, y_test_pred))
 
+# %%
+'''
+From the per-class recall scores, we see that the model does a descent job in
+detecting moderate activity and a very good job in detecting sleep and
+sedentary activities. However, the model has difficulty in detecting
+'tasks-light' activities.
+Also, because our dataset is highly unbalanced, we see a large difference
+between the (unbalanced) accuracy and balanced accuracy scores.
+
+###### Plot predicted and true activity timeseries
+
+Using our utility function, we plot the activity timeseries for participant #3. Here we also pass the first hand-crafted feature (first column of `X`) containing the mean acceleration for plotting.
+'''
+
+# %%
 # Activity plot for participant #3 -- predicted
-fig, _ = plot_activity(X_test, y_test_pred, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('participant #3 - predicted', fontsize='small')
 fig.show()
+
 # Activity plot for participant #3 -- ground truth
-fig, _ = plot_activity(X_test, y_test, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test[pid_test==3], time_test[pid_test==3]
+)
 fig.suptitle('participant #3 - ground truth', fontsize='small')
 fig.show()
 
 # %%
 '''
 ## Accounting for temporal dependencies to smooth the predictions
+
 The random forest classifier performs descently well.
 However, the model does not account for temporal dependencies since we simply
 trained it to independently classify intervals of 30 seconds of activity.
@@ -106,11 +148,11 @@ y_test_modefilt = mode(
     axis=0)[0].ravel()
 y_test_modefilt = np.concatenate(([y_test_pred[0]], y_test_modefilt, [y_test_pred[-1]]))
 print("\n--- Random forest performance with mode filtering ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_modefilt, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_modefilt, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_modefilt))
+print_scores(compute_scores(y_test, y_test_modefilt))
 
-fig, _ = plot_activity(X_test, y_test_modefilt, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_modefilt[pid_test==3], time_test[pid_test==3]
+)
 fig.show()
 
 # %%
@@ -120,8 +162,7 @@ fig.show()
 
 # %%
 '''
-We see that the simple mode smoothing improves both accuracy and kappa
-scores and the activity plot is now smoother.
+We see that the simple mode smoothing improves the summary scores and the activity plot is now smoother.
 
 A more principled approch is to use a Hidden Markov Model (HMM). Here we
 assume that the random forest predictions are mere "observations" of the
@@ -137,11 +178,11 @@ Y_train_pred = classifier.predict_proba(X_train)  # probabilistic predictions --
 prior, emission, transition = utils.train_hmm(Y_train_pred, y_train)  # HMM training step
 y_test_hmm = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (in-bag estimate) ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_hmm, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_hmm, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_hmm))
+print_scores(compute_scores(y_test, y_test_hmm))
 
-fig, _ = plot_activity(X_test, y_test_hmm, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_hmm[pid_test==3], time_test[pid_test==3]
+)
 fig.show()
 
 # %%
@@ -156,11 +197,11 @@ Y_oob = classifier.oob_decision_function_  # probabilistic predictions -- this i
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)  # HMM training step
 y_test_hmm_oob = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (out-of-bag estimate) ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_hmm_oob, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_hmm_oob, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_hmm_oob))
+print_scores(compute_scores(y_test, y_test_hmm_oob))
 
-fig, _ = plot_activity(X_test, y_test_hmm_oob, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_hmm_oob[pid_test==3], time_test[pid_test==3]
+)
 fig.show()
 
 # %%
@@ -176,11 +217,11 @@ classifier_LR = LogisticRegression(
 classifier_LR.fit(X_train, y_train)
 y_test_LR = classifier_LR.predict(X_test)
 print("\n--- Logistic regression performance ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_LR, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_LR, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_LR))
+print_scores(compute_scores(y_test, y_test_LR))
 
-fig, _ = plot_activity(X_test, y_test_LR, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_LR[pid_test==3], time_test[pid_test==3]
+)
 fig.show()
 
 # %%
@@ -193,11 +234,11 @@ Y_train_LR_pred = classifier_LR.predict_proba(X_train)  # probabilistic predicti
 prior, emission, transition = utils.train_hmm(Y_train_LR_pred, y_train)  # HMM training step
 y_test_LR_hmm = utils.viterbi(y_test_LR, prior, transition, emission)  # smoothing
 print("\n--- Logistic regression performance with HMM smoothing ---")
-print("Cohen kappa score:", utils.cohen_kappa_score(y_test, y_test_LR_hmm, pid_test))
-print("Accuracy score:", utils.accuracy_score(y_test, y_test_LR_hmm, pid_test))
-print("Confusion matrix:\n", confusion_matrix(y_test, y_test_LR_hmm))
+print_scores(compute_scores(y_test, y_test_LR_hmm))
 
-fig, _ = plot_activity(X_test, y_test_LR_hmm, pid_test, time_test, ipid=3)
+fig, _ = utils.plot_activity(
+    X_test[pid_test==3][:,0], y_test_LR_hmm[pid_test==3], time_test[pid_test==3]
+)
 fig.show()
 
 # %%
@@ -211,7 +252,7 @@ still much worse than the random forest model.
 '''
 ## Conclusion
 
-Random forest on the hand-crafted features shows a very strong performance.
+Random forest on the hand-crafted features shows very good performance in detecting sleep and sedentary behavior, but the remaining activity classes could be improved.
 Smoothing the predictions to account for temporal dependencies reliably
 improves performance. A simple logistic regression did not seem to perform as
 well as the random forest (at least for the hyperparameters considered).
@@ -226,12 +267,10 @@ model.
 
 ###### Ideas
 
+- Can we improve performance by balancing the dataset?
 - Tune hyperparameters of the random forest (`n_estimators`, `max_depth`,
 `criterion`, etc.). See [RandomForestClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html).
 - How would you select the best set of hyperparameters?
-- Which class is harder to classify for the model?
-- Given that the dataset is highly unbalanced, how informative is the accuracy score?
-- Can we improve performance by balancing the dataset?
 
 ###### References
 - [A nice lecture on validation](https://www.youtube.com/watch?v=o7zzaKd0Lkk&hd=1)
