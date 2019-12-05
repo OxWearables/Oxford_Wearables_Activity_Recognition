@@ -1,7 +1,5 @@
 import numpy as np
 import sklearn.metrics as metrics
-import tempfile
-# from numba import jit
 
 
 # class code (tip to remember: goes from lower to higher activity)
@@ -16,10 +14,6 @@ NUM_FEATS = 125  # number of hand-crafted features
 SAMPLE_RATE = 100  # device sample rate (100hz)
 RAW_SHAPE = (3,3000)  # triaxial x 30secs x 100hz
 RAW_DTYPE = 'float32'  # measurements are in float32 precision
-
-
-def load_raw(filepath):
-    return np.memmap(filepath, dtype=RAW_DTYPE, mode='r').reshape(-1,*RAW_SHAPE)
 
 
 def encode_one_hot(y):
@@ -106,72 +100,6 @@ def print_scores(scores):
     print("\nConfusion matrix:\n", scores['confusion'])
 
 
-def cohen_kappa_score(y_true, y_pred, pid=None):
-    """ Compute kappa score accounting for groups (given by pid) """
-    if pid is None:
-        return metrics.cohen_kappa_score(y_true, y_pred)
-    else:
-        kappas = []
-        for i in np.unique(pid):
-            _y_true = y_true[pid == i]
-            _y_pred = y_pred[pid == i]
-            if len(np.unique(_y_true)) <= 1:
-                # cannot compute kappa with only one class
-                continue
-            kappas.append(metrics.cohen_kappa_score(_y_true, _y_pred))
-        return np.mean(kappas)
-
-
-def accuracy_score(y_true, y_pred, pid=None):
-    """ Compute accuracy score accounting for groups (given by pid) """
-    if pid is None:
-        return metrics.accuracy_score(y_true, y_pred)
-    else:
-        accuracys = []
-        for i in np.unique(pid):
-            _y_true = y_true[pid == i]
-            _y_pred = y_pred[pid == i]
-            accuracys.append(metrics.accuracy_score(_y_true, _y_pred))
-        return np.mean(accuracys)
-
-
-# @jit(nopython=True)
-def sum_sqrsum(alist):
-    ''' Compute sum and sum of squares. Intended for large memmap arrays that
-    do not fit in memory. It uses Kahan summation algorithm to reduce rounding errors:
-    https://en.wikipedia.org/wiki/Kahan_summation_algorithm '''
-    asum = np.zeros_like(alist[0])
-    asqrsum = np.zeros_like(alist[0])
-
-    c_sum = np.zeros_like(alist[0])
-    c_sqrsum = np.zeros_like(alist[0])
-
-    for i in range(len(alist)):
-
-        a_sum = alist[i]
-        y_sum = a_sum - c_sum
-        t_sum = asum + y_sum
-        c_sum = (t_sum - asum) - y_sum
-        asum = t_sum
-
-        a_sqrsum = alist[i]**2
-        y_sqrsum = a_sqrsum - c_sqrsum
-        t_sqrsum = asqrsum + y_sqrsum
-        c_sqrsum = (t_sqrsum - asqrsum) - y_sqrsum
-        asqrsum = t_sqrsum
-
-    return asum, asqrsum
-
-
-def mu_std(alist):
-    ''' Mean and standad deviation of a list of numbers or arrays '''
-    asum, asqrsum = sum_sqrsum(alist)
-    mu = asum / len(alist)
-    var = np.maximum(0, asqrsum/len(alist) - mu**2)
-    std = np.sqrt(var)
-    return mu, std
-
-
 class ArrayFromIdxs(object):
     ''' X[idxs] without returning a copy. Intended for
     large memmap arrays that do not fit in memory.'''
@@ -194,26 +122,6 @@ class ArrayFromMask(ArrayFromIdxs):
     def __init__(self, X, mask):
         idxs = np.where(mask)[0]
         super().__init__(X, idxs)
-
-
-def memmap_from_idxs(X, idxs):
-    ''' Create a memmap for X[idxs] on a temporary file '''
-    idxs = sorted(set(idxs))
-    dtype = X.dtype
-    shape = (len(idxs), *X.shape[1:])
-    X_new = np.memmap(tempfile.TemporaryFile(), mode='w+', dtype=dtype, shape=shape)
-    NFLUSH = 1048
-    for i, idx in enumerate(idxs):
-        X_new[i] = X[idx]
-        if (i+1) % NFLUSH ==0 or i == (len(idxs)-1):
-            X_new.flush()
-    return X_new
-
-
-def memmap_from_mask(X, mask):
-    ''' Create a memmap for X[mask] on a temporary file '''
-    idxs = np.where(mask)[0]
-    return memmap_from_idxs(X, idxs)
 
 
 # -------------------------------------------
