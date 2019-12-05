@@ -58,7 +58,7 @@ print('X_raw shape:', X_raw.shape)
 
 - `X_raw` numpy array of shape `(N,3,3000)` where each row corresponds to 30 seconds of raw tri-axial measurement at 100Hz.
 
-- `X_feats` numpy array of shape `(N,125)` where each row corresponds to *hand-crafted features* extracted from raw 30 seconds measurements. These are collections of features used in published literature such as mean acceleration, covariances between axes, Fourier coefficients, estimated angles, etc. For details, see *References* at the bottom.
+- `X_feats` numpy array of shape `(N,125)` where each row corresponds to *hand-crafted features* extracted from raw 30 seconds measurements. This is a collection of features used in published literature such as mean acceleration, covariances between axes, Fourier coefficients, estimated angles, etc. For details, see *References* at the bottom, also `java_feature_extractor/FeatureExtractor.java` for the feature extractor code.
 
 - `y` numpy array of shape `(N,)` indicating the activity (0: sleep, 1: sedentary, 2: tasks-light, 3: walking, 4: moderate) performed during the 30 seconds instance.
 

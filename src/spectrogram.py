@@ -103,7 +103,6 @@ for i in range(utils.NUM_CLASSES):
         axs[i,j].set_xticks([])
         axs[i,j].set_yticks([])
 fig.show()
-fig.savefig('spectrogram.png')
 
 # %%
 ''' ## Classifying spectrograms for activity recognition
@@ -368,6 +367,5 @@ utils.print_scores(scores_test)
 
 - [A recipe for training neural networks](http://karpathy.github.io/2019/04/25/recipe/)
 - [PyTorch's Conv2d module](https://pytorch.org/docs/stable/nn.html#torch.nn.Conv2d)
-- [Spotify's recommender system](https://benanne.github.io/2014/08/05/spotify-cnns.html)
 
 '''
