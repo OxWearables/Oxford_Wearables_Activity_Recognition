@@ -21,8 +21,6 @@ public class FeatureExtractor {
     public static final int nFFT3D = 15;
     public static final int lowPassCutFrequency = 20;
 
-    public FeatureExtractor() {}
-
     public static double[] extract(
         double[] xArray, double[] yArray, double[] zArray, int sampleRate)
     {
@@ -141,8 +139,6 @@ public class FeatureExtractor {
         double[] xArray, double[] yArray, double[] zArray, int sampleRate
     )
     {
-		// epoch variables
-        double x, y, z;
 		// calculate raw x/y/z summary values
 		double xMean = mean(xArray);
 		double yMean = mean(yArray);
