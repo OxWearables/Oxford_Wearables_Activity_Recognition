@@ -65,7 +65,7 @@ Y_oob = classifier.oob_decision_function_
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)
 
 # Testing
-y_test_pred = utils.viterbi(classifier.predict(X_test), prior, transition, emission)
+y_test_pred = utils.viterbi(classifier.predict(X_test), prior, emission, transition)
 print("\n--- Baseline performance ---")
 utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 
@@ -112,7 +112,7 @@ for i in tqdm(range(X_raw_test.shape[0])):
 
 # %%
 y_test_rot_pred = utils.viterbi(
-    classifier.predict(X_test_rot), prior, transition, emission)
+    classifier.predict(X_test_rot), prior, emission, transition)
 print("\n--- Performance of baseline model on pseudo-test set ---")
 utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
 
@@ -180,11 +180,11 @@ prior, emission, transition = utils.train_hmm(Y_oob, y_train)
 
 # %%
 print("\n--- Performance of re-trained model on the original test set ---")
-y_test_pred = utils.viterbi(classifier.predict(X_test), prior, transition, emission)
+y_test_pred = utils.viterbi(classifier.predict(X_test), prior, emission, transition)
 utils.print_scores(utils.compute_scores(y_test, y_test_pred))
 
 print("\n--- Performance of re-trained model on the pseudo-test set ---")
-y_test_rot_pred = utils.viterbi(classifier.predict(X_test_rot), prior, transition, emission)
+y_test_rot_pred = utils.viterbi(classifier.predict(X_test_rot), prior, emission, transition)
 utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
 
 fig, _ = utils.plot_activity(

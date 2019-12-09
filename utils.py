@@ -43,7 +43,7 @@ def train_hmm(Y_pred, y_true):
     return prior, emission, transition
 
 
-def viterbi(y_pred, prior, transition, emission):
+def viterbi(y_pred, prior, emission, transition):
     ''' https://en.wikipedia.org/wiki/Viterbi_algorithm '''
     small_number = 1e-16
 

@@ -114,7 +114,7 @@ for i in tqdm(range(max_iter)):
 Y_oob = classifier.oob_decision_function_[:y_train.shape[0]]
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)
 y_test_pred = classifier.predict(X_test)
-y_test_hmm = utils.viterbi(y_test_pred, prior, transition, emission)
+y_test_hmm = utils.viterbi(y_test_pred, prior, emission, transition)
 print("\n--- Random forest performance with self-training and HMM smoothing ---")
 utils.print_scores(utils.compute_scores(y_test, y_test_hmm))
 
@@ -128,5 +128,4 @@ utils.print_scores(utils.compute_scores(y_test, y_test_hmm))
 ###### References
 
 - [A nice summary of proxy-labels methods](https://ruder.io/semi-supervised/)
-- [Semi-supervised methods in sklearn](https://scikit-learn.org/stable/modules/label_propagation.html)
 '''

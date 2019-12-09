@@ -146,7 +146,7 @@ We use our utility functions `train_hmm()` and `viterbi()` to obtain these matri
 # %%
 Y_train_pred = classifier.predict_proba(X_train)  # probabilistic predictions -- this is a (N,5) array
 prior, emission, transition = utils.train_hmm(Y_train_pred, y_train)  # HMM training step
-y_test_hmm = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
+y_test_hmm = utils.viterbi(y_test_pred, prior, emission, transition)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (in-bag estimate) ---")
 utils.print_scores(utils.compute_scores(y_test, y_test_hmm))
 
@@ -165,7 +165,7 @@ Instead of using `predict_proba` on the same set that the model was trained on, 
 # %%
 Y_oob = classifier.oob_decision_function_  # probabilistic predictions -- this is a (N,5) array
 prior, emission, transition = utils.train_hmm(Y_oob, y_train)  # HMM training step
-y_test_hmm_oob = utils.viterbi(y_test_pred, prior, transition, emission)  # smoothing
+y_test_hmm_oob = utils.viterbi(y_test_pred, prior, emission, transition)  # smoothing
 print("\n--- Random forest performance with HMM smoothing (out-of-bag estimate) ---")
 utils.print_scores(utils.compute_scores(y_test, y_test_hmm_oob))
 
@@ -202,7 +202,7 @@ fig.show()
 # %%
 Y_train_LR_pred = classifier_LR.predict_proba(X_train)  # probabilistic predictions -- this is a (N,5) array
 prior, emission, transition = utils.train_hmm(Y_train_LR_pred, y_train)  # HMM training step
-y_test_LR_hmm = utils.viterbi(y_test_LR, prior, transition, emission)  # smoothing
+y_test_LR_hmm = utils.viterbi(y_test_LR, prior, emission, transition)  # smoothing
 print("\n--- Logistic regression performance with HMM smoothing ---")
 utils.print_scores(utils.compute_scores(y_test, y_test_LR_hmm))
 
