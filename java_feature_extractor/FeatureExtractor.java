@@ -1,3 +1,27 @@
+/* BSD 2-Clause (c) 2014: A.Doherty (Oxford), D.Jackson, N.Hammerla (Newcastle)
+ *
+ * Code for extracting features from raw triaxial acceleration measurements.
+ * The features are derived from four papers:
+ *
+ * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior
+ * Classification. Ellis K, Kerr J, Godbole S, Staudenmayer J, Lanckriet G.
+ *
+ * A universal, accurate intensity-based classification of different
+ * physical activities using raw data of accelerometer. Henri Vaha-Ypya,
+ * Tommi Vasankari, Pauliina Husu, Jaana Suni and Harri Sievanen
+ *
+ * Physical Activity Classification using the GENEA Wrist Worn
+ * Accelerometer Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
+ *
+ * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior
+ * Classification Katherine Ellis, Jacqueline Kerr, Suneeta Godbole, John
+ * Staudenmayer, and Gert Lanckriet
+ *
+ * This code is distilled from
+ * https://github.com/activityMonitoring/biobankAccelerometerAnalysis
+ *
+ */
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.math.RoundingMode;
