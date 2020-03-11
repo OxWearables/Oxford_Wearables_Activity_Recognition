@@ -324,7 +324,6 @@ public class FeatureExtractor {
 		transformer.realForward(vmFFT);
 		double max = max(vmFFT);
 
-		// find dominant frequency, second dominant frequency, and dominant between .6 - 2.5Hz
 		double f1=-1, f33=-1;
 		double p1=0, p33=0;
 
