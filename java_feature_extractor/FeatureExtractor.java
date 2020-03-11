@@ -13,9 +13,8 @@
  * Physical Activity Classification using the GENEA Wrist Worn
  * Accelerometer Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
  *
- * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior
- * Classification Katherine Ellis, Jacqueline Kerr, Suneeta Godbole, John
- * Staudenmayer, and Gert Lanckriet
+ * Activity recognition using a single accelerometer placed at the wrist or ankle.
+ * Mannini A, Intille SS, Rosenberger M, Sabatini AM, Haskell W.
  *
  * This code is distilled from
  * https://github.com/activityMonitoring/biobankAccelerometerAnalysis
