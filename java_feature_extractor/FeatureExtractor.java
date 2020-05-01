@@ -13,9 +13,8 @@
  * Physical Activity Classification using the GENEA Wrist Worn
  * Accelerometer Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
  *
- * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior
- * Classification Katherine Ellis, Jacqueline Kerr, Suneeta Godbole, John
- * Staudenmayer, and Gert Lanckriet
+ * Activity recognition using a single accelerometer placed at the wrist or ankle.
+ * Mannini A, Intille SS, Rosenberger M, Sabatini AM, Haskell W.
  *
  * This code is distilled from
  * https://github.com/activityMonitoring/biobankAccelerometerAnalysis
@@ -42,143 +41,61 @@ import org.jtransforms.fft.DoubleFFT_1D;
 
 public class FeatureExtractor {
 
-    public static final int nFFT3D = 15;
-    public static final int lowPassCutFrequency = 20;
 
-    public static double[] extract(
-        double[] xArray, double[] yArray, double[] zArray, int sampleRate)
+    public static double[] extract(final double[] x, final double[] y, final double[] z, final int sampleRate)
     {
-        double[] vArray = norm(xArray, yArray, zArray);
+        final double[] basicFeats = getBasic(x, y, z, sampleRate);
+        final double[] sanDiegoFeats = getSanDiego(x, y, z, sampleRate);
+        final double[] madFeats = getMAD(x, y, z);
+        final double[] unileverFeats = getUnilever(x, y, z, sampleRate);
+        final double[] FFT3D = getFFT3D(x, y, z);
 
-        double accPA = calculateAccPA(vArray, sampleRate);
-        double[] basicStatistics = calculateBasicStatistics(
-            xArray, yArray, zArray, sampleRate);
-        double[] sanDiegoFeatures = calculateSanDiegoFeatures(
-            xArray, yArray, zArray, sampleRate);
-        double[] sanDiegoFFT = calculateSanDiegoFFT(vArray, sampleRate);
-        double[] madFeatures = calculateMADFeatures(vArray);
-        double[] unileverFeatures = calculateUnileverFeatures(vArray, sampleRate);
-        double[] fft3D = calculateFFT3D(xArray, yArray, zArray, vArray, nFFT3D);
-
-        double[] feats = new double[1 +
-            basicStatistics.length +
-            sanDiegoFeatures.length +
-            sanDiegoFFT.length +
-            madFeatures.length +
-            unileverFeatures.length +
-            fft3D.length];
-
-        feats[0] = accPA;
-        for (int i=0; i<basicStatistics.length; i++){
-            feats[1 + i] = basicStatistics[i];
-        }
-        for (int i=0; i<sanDiegoFeatures.length; i++){
-            feats[1 + basicStatistics.length + i] = sanDiegoFeatures[i];
-        }
-        for (int i=0; i<sanDiegoFFT.length; i++){
-            feats[1 +
-                basicStatistics.length +
-                sanDiegoFeatures.length +
-                i] = sanDiegoFFT[i];
-        }
-        for (int i=0; i<madFeatures.length; i++){
-            feats[1 +
-                basicStatistics.length +
-                sanDiegoFeatures.length +
-                sanDiegoFFT.length +
-                i] = madFeatures[i];
-        }
-        for (int i=0; i<unileverFeatures.length; i++){
-            feats[1 +
-                basicStatistics.length +
-                sanDiegoFeatures.length +
-                sanDiegoFFT.length +
-                madFeatures.length +
-                i] = unileverFeatures[i];
-        }
-        for (int i=0; i<fft3D.length; i++){
-            feats[
-                1 +
-                basicStatistics.length +
-                sanDiegoFeatures.length +
-                sanDiegoFFT.length +
-                unileverFeatures.length +
-                madFeatures.length +
-                i] = fft3D[i];
-        }
+        double[] feats = concat(basicFeats, sanDiegoFeats, madFeats, unileverFeats, FFT3D);
 
         return feats;
-
     }
 
-    public static float[] extract(
-        float[] xArray, float[] yArray, float[] zArray, int sampleRate
-    )
-    {
-        double[] xArrayDouble = new double[xArray.length];
-        double[] yArrayDouble = new double[yArray.length];
-        double[] zArrayDouble = new double[zArray.length];
-        for (int i=0; i<xArray.length; i++){
-            xArrayDouble[i] = (double) xArray[i];
-        }
-        for (int i=0; i<yArray.length; i++){
-            yArrayDouble[i] = (double) yArray[i];
-        }
-        for (int i=0; i<zArray.length; i++){
-            zArrayDouble[i] = (double) zArray[i];
-        }
 
-        double[] featsDouble = extract(
-            xArrayDouble, yArrayDouble, zArrayDouble, sampleRate);
+    public static float[] extract(final float[] x, final float[] y, final float[] z, final int sampleRate)
+    {
+        double[] xDouble = new double[x.length];
+        double[] yDouble = new double[y.length];
+        double[] zDouble = new double[z.length];
+        for (int i=0; i<x.length; i++) xDouble[i] = (double) x[i];
+        for (int i=0; i<y.length; i++) yDouble[i] = (double) y[i];
+        for (int i=0; i<z.length; i++) zDouble[i] = (double) z[i];
+
+        double[] featsDouble = extract(xDouble, yDouble, zDouble, sampleRate);
         float[] feats = new float[featsDouble.length];
-        for (int i=0; i<featsDouble.length; i++){
-            feats[i] = (float) featsDouble[i];
-        }
+        for (int i=0; i<featsDouble.length; i++) feats[i] = (float) featsDouble[i];
+
         return feats;
     }
 
-    public static double calculateAccPA(double[] vArray, int sampleRate)
+
+    /**
+     * A bunch of basic statistics
+     */
+    public static double [] getBasic(double[] x, double[] y, double[] z, int sampleRate)
     {
-        // Grab a copy because the next operations are inplace
-        double[] vArrayNew = vArray.clone();
-
-        // Remove gravity
-        minusOne(vArrayNew);
-
-        // Low-pass filter
-        LowpassFilter filter = new LowpassFilter(lowPassCutFrequency, sampleRate);
-        filter.filter(vArrayNew);
-
-        // Truncate
-        trunc(vArrayNew);
-
-        // Mean
-        double accPA = mean(vArrayNew);
-
-        return accPA;
-
-    }
-
-    public static double [] calculateBasicStatistics(
-        double[] xArray, double[] yArray, double[] zArray, int sampleRate
-    )
-    {
+        double enmoTrunc = getEnmoTrunc(x, y, z, sampleRate);
 		// calculate raw x/y/z summary values
-		double xMean = mean(xArray);
-		double yMean = mean(yArray);
-		double zMean = mean(zArray);
-		double xRange = range(xArray);
-		double yRange = range(yArray);
-		double zRange = range(zArray);
-		double xStd = std(xArray, xMean);
-		double yStd = std(yArray, yMean);
-		double zStd = std(zArray, zMean);
+		double xMean = mean(x);
+		double yMean = mean(y);
+		double zMean = mean(z);
+		double xRange = range(x);
+		double yRange = range(y);
+		double zRange = range(z);
+		double xStd = std(x, xMean);
+		double yStd = std(y, yMean);
+		double zStd = std(z, zMean);
 
-        double xyCovariance = covariance(xArray, yArray, xMean, yMean, 0);
-        double xzCovariance = covariance(xArray, zArray, xMean, zMean, 0);
-        double yzCovariance = covariance(yArray, zArray, yMean, zMean, 0);
+        double xyCovariance = covariance(x, y, xMean, yMean, 0);
+        double xzCovariance = covariance(x, z, xMean, zMean, 0);
+        double yzCovariance = covariance(y, z, yMean, zMean, 0);
 
         double[] feats = {
+            enmoTrunc,
             xMean, yMean, zMean,
             xRange, yRange, zRange,
             xStd, yStd, zStd,
@@ -186,49 +103,61 @@ public class FeatureExtractor {
         };
 
         return feats;
-
     }
 
-    /* From paper:
-     * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior Classification.
-     * Ellis K, Kerr J, Godbole S, Staudenmayer J, Lanckriet G.
+    /**
+     * Euclidean norm minus one truncated: max(0, sqrt(x^2+y^2+z^2)-1)
+     */
+    public static double getEnmoTrunc(double[] x, double[] y, double[] z, int sampleRate)
+    {
+        final int lowpassCutFrequency = 20;
+        double[] v = norm(x, y, z);
+        // Remove gravity
+        for (int i=0; i<v.length; i++) v[i] -= 1;
+        // Low-pass filter
+        new LowpassFilter(lowpassCutFrequency, sampleRate).filter(v);
+        // Truncate
+        for (int i=0; i<v.length; i++) v[i] = Math.max(v[i], 0);
+        // Mean
+        double enmoTrunc = mean(v);
+        return enmoTrunc;
+    }
+
+
+    /**
+     * From paper: Hip and Wrist Accelerometer Algorithms for Free-Living Behavior
+     * Classification. Ellis K, Kerr J, Godbole S, Staudenmayer J, Lanckriet G.
      * https://www.ncbi.nlm.nih.gov/pubmed/26673126
      */
-	public static double [] calculateSanDiegoFeatures(
-        double[] xArray, double[] yArray, double[] zArray, int sampleRate)
-        {
+	public static double [] getSanDiego(double[] x, double[] y, double[] z, int sampleRate)
+    {
+		final int n = x.length;
 
-		int n = xArray.length;
-
-		// San Diego g values
-		// the g matric contains the estimated gravity vector, which is
-		// essentially a low pass filter
-		double[] gg = sanDiegoGetAvgGravity(xArray, yArray, zArray, sampleRate);
+		double[] gg = getSanDiegoGravity(x, y, z, sampleRate);
 		double gxMean = gg[0];
 		double gyMean = gg[1];
 		double gzMean = gg[2];
 
 		// subtract column means and get vector magnitude
-		double[] v = new double[n]; // vector magnitude
+		double[] wv = new double[n]; // vector magnitude
 		double[] wx = new double[n]; // gravity adjusted weights
 		double[] wy = new double[n];
 		double[] wz = new double[n];
 		for (int i = 0; i < n; i++) {
-			wx[i] = xArray[i]-gxMean;
-			wy[i] = yArray[i]-gyMean;
-			wz[i] = zArray[i]-gzMean;
-			v[i] = norm( wx[i], wy[i], wz[i]);
+			wx[i] = x[i]-gxMean;
+			wy[i] = y[i]-gyMean;
+			wz[i] = z[i]-gzMean;
+			wv[i] = norm( wx[i], wy[i], wz[i]);
 		}
 
-		// Write epoch
-		double sdMean = mean(v);
-		double sdStd = stdR(v, sdMean);
+		double sdMean = mean(wv);
+		double sdStd = stdR(wv, sdMean);
 		double sdCoefVariation = 0.0;
 		if (sdMean!=0) sdCoefVariation = sdStd/sdMean;
 		// median, min, max, 25thp, 75thp
-        double[] paQuartiles = percentiles(v, new double[] {0, 0.25, 0.5, 0.75, 1});
+        double[] paQuartiles = percentiles(wv, new double[] {0, 0.25, 0.5, 0.75, 1});
 
-		double autoCorrelation = Correlation(v, v, sampleRate);
+		double autoCorrelation = Correlation(wv, wv, sampleRate);
 		double xyCorrelation = Correlation(wx, wy);
 		double xzCorrelation = Correlation(wx, wz);
 		double yzCorrelation = Correlation(wy, wz);
@@ -241,58 +170,55 @@ public class FeatureExtractor {
 		// gravity component angles
 		double gxyAngle = Math.atan2(gyMean,gzMean);
 		double gzxAngle = Math.atan2(gzMean,gxMean);
-		double gyxAngle = Math.atan2(gyMean,gxMean);
+        double gyxAngle = Math.atan2(gyMean,gxMean);
 
-        double[] feats = {
-            sdMean, sdStd, sdCoefVariation,
-            paQuartiles[2], paQuartiles[0],
-            paQuartiles[4], paQuartiles[1],
-            paQuartiles[3],
-            autoCorrelation,
-            xyCorrelation, xzCorrelation, yzCorrelation,
-            angleAvgStdYZ[0], angleAvgStdZX[0], angleAvgStdYX[0],
-            angleAvgStdYZ[1], angleAvgStdZX[1], angleAvgStdYX[1],
-            gxyAngle, gzxAngle, gyxAngle,
-        };
+        double[] FFTfeats = getSanDiegoFFT(x, y, z, sampleRate);
+
+        double[] feats = concat(
+            new double[] {sdMean, sdStd, sdCoefVariation},
+            new double[] {paQuartiles[2], paQuartiles[0], paQuartiles[4], paQuartiles[1], paQuartiles[3]},
+            new double[] {autoCorrelation, xyCorrelation, xzCorrelation, yzCorrelation},
+            new double[] {angleAvgStdYZ[0], angleAvgStdZX[0], angleAvgStdYX[0]},
+            new double[] {angleAvgStdYZ[1], angleAvgStdZX[1], angleAvgStdYX[1]},
+            new double[] {gxyAngle, gzxAngle, gyxAngle},
+            FFTfeats
+        );
 
         return feats;
+    }
 
-	}
 
-	// returns { x, y, z } averages of gravity
-	public static double[] sanDiegoGetAvgGravity(
-        double[] xArray, double[] yArray, double[] zArray, int sampleRate)
-        {
+	public static double[] getSanDiegoGravity(double[] x, double[] y, double[] z, int sampleRate)
+    {
 		// San Diego paper 0.5Hz? low-pass filter approximation
-		// this code takes in w and returns gg
-		int n = xArray.length;
-		int gn = n-(sampleRate-1); // number of moving average values to estimate gravity direction with
-		int gStartIdx = n - gn; // number of gravity values to discard at beginning
+		final int n = x.length;
+		final int gn = n-(sampleRate-1); // number of moving average values to estimate gravity direction with
+		final int gStartIdx = n - gn; // number of gravity values to discard at beginning
 
 		double[] gx = new double[gn];
 		double[] gy = new double[gn];
 		double[] gz = new double[gn];
 
         // calculating moving average of signal
-        double x = 0.9;
+        final double alpha = 0.9;
 
-        double xMovAvg = (1-x)*xArray[0];
-        double yMovAvg = (1-x)*yArray[0];
-        double zMovAvg = (1-x)*zArray[0];
+        double xMovAvg = (1-alpha)*x[0];
+        double yMovAvg = (1-alpha)*y[0];
+        double zMovAvg = (1-alpha)*z[0];
 
-        for (int c = 1; c < n; c++) {
-            if (c < gStartIdx) {
-                xMovAvg = xMovAvg * x + (1-x) * xArray[c];
-                yMovAvg = yMovAvg * x + (1-x) * yArray[c];
-                zMovAvg = zMovAvg * x + (1-x) * zArray[c];
+        for (int i = 1; i < n; i++) {
+            if (i < gStartIdx) {
+                xMovAvg = xMovAvg * alpha + (1-alpha) * x[i];
+                yMovAvg = yMovAvg * alpha + (1-alpha) * y[i];
+                zMovAvg = zMovAvg * alpha + (1-alpha) * z[i];
             } else {
                 // only store the signal after it has stabilized
-                xMovAvg = xMovAvg * x + (1-x) * xArray[c];
-                yMovAvg = yMovAvg * x + (1-x) * yArray[c];
-                zMovAvg = zMovAvg * x + (1-x) * zArray[c];
-                gx[c-gStartIdx] = xMovAvg;
-                gy[c-gStartIdx] = yMovAvg;
-                gz[c-gStartIdx] = zMovAvg;
+                xMovAvg = xMovAvg * alpha + (1-alpha) * x[i];
+                yMovAvg = yMovAvg * alpha + (1-alpha) * y[i];
+                zMovAvg = zMovAvg * alpha + (1-alpha) * z[i];
+                gx[i-gStartIdx] = xMovAvg;
+                gy[i-gStartIdx] = yMovAvg;
+                gz[i-gStartIdx] = zMovAvg;
             }
         }
 
@@ -302,134 +228,119 @@ public class FeatureExtractor {
         double gzMean = mean(gz);
 
 		return new double[] {gxMean, gyMean, gzMean};
-	}
+    }
 
-	public static double[] calculateSanDiegoFFT(double[] vArray, int sampleRate) {
 
-		int n = vArray.length;
-		// FFT frequency interval = sample frequency / num samples
-		double FFTinterval = sampleRate / (1.0 * n); // (Hz)
+    public static double[] getSanDiegoFFT(double[] x, double[] y, double[] z, int sampleRate)
+    {
 
-		int numBins = 15; // From original implementation
+        /*
+        Compute FFT and power spectrum density
+        */
+        final double[] v = norm(x, y, z);
+		final int n = v.length;
+        final double vMean = mean(v);
+        // Initialize FFT array. Also zero-center signal to remove 0Hz frequency.
+        //TODO: Zero-padding for more accurate frequency estimation:  https://uk.mathworks.com/help/signal/ug/amplitude-estimation-and-zero-padding.html
+        // Note: Padding before or after windowing?: https://dsp.stackexchange.com/questions/13736/zero-pad-before-or-after-windowing-for-fft
+        double[] vFFT = new double[n];
+        for (int i = 0; i < n; i++)  vFFT[i] = v[i] - vMean;
+        // Hanning window attenuates the signal to zero at endpoints
+        HanningWindow(vFFT, vFFT.length);
+        new DoubleFFT_1D(vFFT.length).realForward(vFFT);
+        final double[] vFFTpow = getFFTpower(vFFT);
 
-		// set input data array
-		double[] vmFFT = new double[n];
-        for (int c = 0; c < n; c++) {
-        	vmFFT[c] = vArray[c];
+        /*
+        Compute spectral entropy
+        See https://www.mathworks.com/help/signal/ref/pentropy.html#mw_a57f549d-996c-47d9-8d45-e80cb739ed41
+        Note: the following is the spectral entropy of only half of the spectrum (which is symetric anyways)
+        */
+        double H = 0.0;  // spectral entropy
+        final double vFFTpowsum = sum(vFFTpow);
+        for (int i = 0; i < vFFTpow.length; i++) {
+            double p = vFFTpow[i] / (vFFTpowsum + 1E-8);
+            if (p <= 0) continue;
+            H += -p * Math.log(p + 1E-8);
         }
+        H /= Math.log(vFFTpow.length);  // Normalize spectral entropy
 
-        // Hanning window attenuates the signal to zero at it's start and end
-        HanningWindow(vmFFT,n);
-
-        DoubleFFT_1D transformer = new DoubleFFT_1D(n);
-		transformer.realForward(vmFFT);
-		double max = max(vmFFT);
-
-		// find dominant frequency, second dominant frequency, and dominant between .6 - 2.5Hz
+        /*
+        Find dominant frequencies overall, also between 0.3Hz and 3Hz
+        */
+		final double FFTinterval = sampleRate / (1.0 * n); // (Hz)
 		double f1=-1, f33=-1;
 		double p1=0, p33=0;
-
-		double totalPLnP = 0.0; // sum of P * ln(P)
-		double magDC = vmFFT[0]/max;
-		totalPLnP += magDC * Math.log(magDC);
-
-		for (int i = 1; i < n/2; i++) {
-			double freq = FFTinterval * i;
-			double Re = vmFFT[i*2];
-			double Im = vmFFT[i*2+1];
-			double mag = Math.sqrt( Re * Re + Im * Im)/max;
-
-        	totalPLnP += mag * Math.log(mag);
-
-        	if (mag>p1) {
+		for (int i = 0; i < vFFTpow.length; i++) {
+            double freq = FFTinterval * i;
+            double p = vFFTpow[i];
+        	if (p > p1) {
         		f1 = freq;
-        		p1 = mag;
+                p1 = p;
         	}
-        	if (freq > 0.3 && freq < 3 && mag>p33) {
+        	if (freq > 0.3 && freq < 3 && p > p33) {
         		f33 = freq;
-        		p33 = mag;
-        	}
-
-		}
-		// entropy, AKA (Power) Spectral Entropy, measures 'peakyness' of the frequency spectrum
-		// This should be higher where there are periodic motions such as walking
-		double H = - totalPLnP;// / total - (n/2) * Math.log(total);
-
-		double[] binnedFFT = new double[numBins];
-
-		for (int i = 0; i < numBins; i++) {
-			binnedFFT[i] = 0;
-		}
-		int numWindows = (int) Math.floor(n/sampleRate);
-		double[] windowSamples = new double[sampleRate];
-        DoubleFFT_1D windowTransformer = new DoubleFFT_1D(sampleRate);
-        max = Double.NEGATIVE_INFINITY;
-        // do a FFT on each 1 second window (therefore FFT-interval will be one)
-        FFTinterval = 1;
-		for (int window = 0; window < numWindows; window++ ) {
-			for (int i = 0; i < sampleRate; i++) {
-				windowSamples[i] = vArray[i+window*(sampleRate/2)];
-			}
-			HanningWindow(windowSamples, sampleRate);
-			windowTransformer.realForward(windowSamples);
-			for (int i = 0; i < numBins; i++) {
-				double mag;
-				if (i==0) {
-					mag = windowSamples[i];
-				}
-				else {
-					double Re = windowSamples[i*2];
-					double Im = windowSamples[i*2+1];
-					mag = Math.sqrt( Re * Re + Im * Im);
-				}
-				binnedFFT[i] += mag;
-				max = Math.max(max, mag); // find max as we go
-			}
-		}
-
-		// Divide by the number of windows (to get the mean value)
-		// Then divide by the maximum of the windowed FFT values (found before combination)
-		// Note this does not mean the new max of binnedFFT will be one, it will be less than one if one window is stronger than the others
-		scale(binnedFFT, 1 / (max * numWindows));
-
-        // Concatenate results
-        double[] feats = new double[5 + binnedFFT.length];
-        feats[0] = f1; feats[1] = p1;
-        feats[2] = f33; feats[3] = p33;
-        feats[4] = H;
-        for (int i=0; i < binnedFFT.length; i++) {
-            feats[5+i] = binnedFFT[i];
+                p33 = p;
+            }
         }
+        // Use logscale for convenience
+        p1 = Math.log(p1 + 1E-8);
+        p33 = Math.log(p33 + 1E-8);
+
+        /*
+        Estimate powers for bins 0-14Hz using Welch's method
+        See: https://en.wikipedia.org/wiki/Welch%27s_method
+        Note: Averaging the magnitudes (instead of the powers) yielded
+        slightly better classification results in random forest
+        */
+		final int numBins = 15;
+		double[] binnedFFT = new double[numBins];
+		for (int i = 0; i < numBins; i++) binnedFFT[i] = 0;
+        final int windowOverlap = sampleRate / 2;  // 50% overlapping windows
+        final int numWindows = n / windowOverlap - 1;
+		double[] windowFFT = new double[sampleRate];
+        DoubleFFT_1D windowTransformer = new DoubleFFT_1D(sampleRate);
+		for (int i = 0; i < numWindows; i++ ) {
+			for (int j = 0; j < windowFFT.length; j++) windowFFT[j] = v[i*windowOverlap+j];  // grab window
+			HanningWindow(windowFFT, windowFFT.length);
+			windowTransformer.realForward(windowFFT);
+            final double[] windowFFTmag = getFFTmagnitude(windowFFT);
+            for (int j = 0; j < binnedFFT.length; j++) binnedFFT[j] += windowFFTmag[j];
+        }
+        // Average magnitudes. Also use logscale for convenience.
+        for (int i = 0; i < binnedFFT.length; i++) binnedFFT[i] = Math.log(binnedFFT[i]/numWindows + 1E-8);
+
+        double[] feats = concat(new double[] {f1, p1, f33, p33, H}, binnedFFT);
 
         return feats;
 
-	}
+    }
 
-	/* From paper:
+
+	/**
+     * From paper:
 	 * A universal, accurate intensity-based classification of different physical
 	 * activities using raw data of accelerometer.
 	 * Henri Vaha-Ypya, Tommi Vasankari, Pauliina Husu, Jaana Suni and Harri Sievanen
      * https://www.ncbi.nlm.nih.gov/pubmed/24393233
 	 */
-	public static double[] calculateMADFeatures(double[] vArray)
+	public static double[] getMAD(double[] x, double[] y, double[] z)
     {
-		// used in calculation
-		int n = vArray.length;
-		double N = (double) n; // avoid integer arithmetic
-		double vmMean = mean(vArray);
-		double vmStd = std(vArray, vmMean);
+        final double[] v = norm(x, y, z);
+		final int n = v.length;
+        final double N = (double) n; // avoid integer arithmetic
 
-		// features from paper:
+		double vMean = mean(v);
+		double vStd = std(v, vMean);
 		double MAD = 0; // Mean amplitude deviation (MAD) describes the typical distance of data points about the mean
 		double MPD = 0; // Mean power deviation (MPD) describes the dispersion of data points about the mean
 		double skew = 0; // Skewness (skewR) describes the asymmetry of dispersion of data points about the mean
 		double kurt = 0; // Kurtosis (kurtR) describes the peakedness of the distribution of data points
-		for (int c = 0; c < n; c++) {
-			double diff = vArray[c] - vmMean;
+		for (int i = 0; i < n; i++) {
+			double diff = v[i] - vMean;
 			MAD += Math.abs(diff);
-			MPD += Math.pow(Math.abs(diff), 1.5);
-			skew += Math.pow(diff/vmStd, 3);
-			kurt += Math.pow(diff/vmStd, 4);
+            MPD += Math.pow(Math.abs(diff), 1.5);
+			skew += Math.pow(diff/(vStd + 1E-8), 3);
+			kurt += Math.pow(diff/(vStd + 1E-8), 4);
 		}
 
 		MAD /= N;
@@ -440,8 +351,126 @@ public class FeatureExtractor {
         double[] feats = { MAD, MPD, skew, kurt };
 
         return feats;
+    }
+
+
+    /**
+     * From paper:
+     * Physical Activity Classification using the GENEA Wrist Worn Accelerometer
+     * Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
+     * https://www.ncbi.nlm.nih.gov/pubmed/21988935
+     * See also:
+     * Activity recognition using a single accelerometer placed at the wrist or ankle.
+     * Mannini A, Intille SS, Rosenberger M, Sabatini AM, Haskell W.
+	 */
+    public static double [] getUnilever(double[] x, double[] y, double[] z, int sampleRate)
+    {
+
+        /*
+        Compute FFT and power spectrum density
+        */
+        final double[] v = norm(x, y, z);
+		final int n = v.length;
+        final double vMean = mean(v);
+        // Initialize FFT array. Also zero-center signal to remove 0Hz frequency.
+        //TODO: Zero-padding for more accurate frequency estimation:  https://uk.mathworks.com/help/signal/ug/amplitude-estimation-and-zero-padding.html
+        // Note: Padding before or after windowing?: https://dsp.stackexchange.com/questions/13736/zero-pad-before-or-after-windowing-for-fft
+        double[] vFFT = new double[n];
+        for (int i = 0; i < n; i++)  vFFT[i] = v[i] - vMean;
+        // Hanning window attenuates the signal to zero at endpoints
+        HanningWindow(vFFT, vFFT.length);
+        new DoubleFFT_1D(vFFT.length).realForward(vFFT);
+        final double[] vFFTpow = getFFTpower(vFFT);
+
+        /*
+        Find dominant frequencies between 0.3Hz - 15Hz, also between 0.6Hz - 2.5Hz
+        */
+		final double maxFreq = 15;
+		final double minFreq = 0.3;
+		final double FFTinterval = sampleRate / (1.0 * n); // (Hz)
+ 		double f1=-1, f2=-1, f625=-1, f33=-1;
+ 		double p1=0, p2=0, p625=0, p33=0;
+        double totalPower = 0.0;
+        for (int i = 0; i < vFFTpow.length; i++) {
+            double freq = FFTinterval * i;
+            if (freq < minFreq || freq > maxFreq) continue;
+            double p = vFFTpow[i];
+            totalPower += p;
+            if (p > p1) {
+        		f2 = f1;
+        		p2 = p1;
+        		f1 = freq;
+        		p1 = p;
+        	} else if (p > p2) {
+        		f2 = freq;
+        		p2 = p;
+        	}
+        	if (p > p625 && freq > 0.6 && freq < 2.5) {
+        		f625 = freq;
+        		p625 = p;
+        	}
+        }
+        // Use logscale for convenience
+        totalPower = Math.log(totalPower + 1E-8);
+        p1 = Math.log(p1 + 1E-8);
+        p2 = Math.log(p2 + 1E-8);
+        p625 = Math.log(p625 + 1E-8);
+
+        double[] feats = { f1, p1, f2, p2, f625, p625, totalPower };
+
+        return feats;
+    }
+
+    /**
+     * FFT over each axis and vector norm
+	 */
+	public static double[] getFFT3D(double[] x, double[] y, double[] z)
+    {
+        final int nFFT = 15;
+        final double[] v = norm(x, y, z);
+		final int n = v.length;
+        final DoubleFFT_1D transformer = new DoubleFFT_1D(2*n);
+
+        double[] FFT = new double[2*n];  // zero-padded
+        double[] features = new double[4*nFFT];
+        double[] FFTmag = new double[n];
+        
+        // FFT along x-axis
+        for (int i=0; i<FFT.length; i++) { FFT[i] = 0; }
+        for (int i=0; i<n; i++) { FFT[i] = x[i]; }
+		HanningWindow(FFT, n);
+		transformer.realForward(FFT);
+        FFTmag = getFFTmagnitude(FFT);
+        for (int i=0; i<nFFT; i++) { features[i] = FFTmag[i]; }
+
+        // FFT along y-axis
+        for (int i=0; i<FFT.length; i++) { FFT[i] = 0; }
+        for (int i=0; i<n; i++) { FFT[i] = y[i]; }
+		HanningWindow(FFT, n);
+		transformer.realForward(FFT);
+        FFTmag = getFFTmagnitude(FFT);
+        for (int i=0; i<nFFT; i++) { features[nFFT+i] = FFTmag[i]; }
+
+        // FFT along z-axis
+        for (int i=0; i<FFT.length; i++) { FFT[i] = 0; }
+        for (int i=0; i<n; i++) { FFT[i] = z[i]; }
+		HanningWindow(FFT, n);
+		transformer.realForward(FFT);
+        FFTmag = getFFTmagnitude(FFT);
+        for (int i=0; i<nFFT; i++) { features[2*nFFT+i] = FFTmag[i]; }
+
+        // FFT along vector norm
+        for (int i=0; i<FFT.length; i++) { FFT[i] = 0; }
+        for (int i=0; i<n; i++) { FFT[i] = v[i]; }
+        HanningWindow(FFT, n);
+        transformer.realForward(FFT);
+        FFTmag = getFFTmagnitude(FFT);
+        for (int i=0; i<nFFT; i++) { features[3*nFFT+i] = FFTmag[i]; }
+
+        return features;
 
 	}
+
 
 	public static double[] HanningWindow(double[] signal_in, int size)
 	{
@@ -453,171 +482,73 @@ public class FeatureExtractor {
 	}
 
 	public static double[] getFFTmagnitude(double[] FFT) {
-		return getFFTmagnitude(FFT, FFT.length);
+		return getFFTmagnitude(FFT, true);
 	}
 
 	/* converts FFT library's complex output to only absolute magnitude */
-	public static double[] getFFTmagnitude(double[] FFT, int n) {
-		if (n<1) {
-			System.err.println("cannot get FFT magnitude of array with zero elements");
-			return new double[] {0.0};
-		}
+	public static double[] getFFTmagnitude(double[] FFT, boolean normalize) {
+        /* Get magnitudes from FFT coefficients */
 
-		/*
-		if n is even then
-		 a[2*k] = Re[k], 0<=k<n/2
-		 a[2*k+1] = Im[k], 0<k<n/2
-		 a[1] = Re[n/2]
-		e.g for n = 6: (yes there will be 7 array elements for 4 magnitudes)
-		a = { Re[0], Re[3], Re[1], Im[1], Re[2], Im[2], Im[3]}
+        double[] FFTmag = getFFTpower(FFT, normalize);
+        for (int i=0; i<FFTmag.length; i++) FFTmag[i] = Math.sqrt(FFTmag[i]);
+        return FFTmag;
+    }
 
-		if n is odd then
-		 a[2*k] = Re[k], 0<=k<(n+1)/2
-		 a[2*k+1] = Im[k], 0<k<(n-1)/2
-		 a[1] = Im[(n-1)/2]
-		e.g for n = 7: (again there will be 7 array elements for 4 magnitudes)
-		a = { Re[0], Im[3], Re[1], Im[1], Re[2], Im[2], Re[3]}
+	public static double[] getFFTpower(double[] FFT) {
+		return getFFTpower(FFT, true);
+    }
 
-		*/
-		int m = 1 + (int) Math.floor(n/2); // output array size
-		double[] output = new double[m];
+	public static double[] getFFTpower(double[] FFT, boolean normalize) {
+        /*
+        Get powers from FFT coefficients
+
+        The layout of FFT is as follows (computed using JTransforms, see
+        https://github.com/wendykierp/JTransforms/blob/3c3253f240510c5f9ec700f2d9d25cfadfc857cc/src/main/java/org/jtransforms/fft/DoubleFFT_1D.java#L459):
+
+		If n is even then
+        FFT[2*k] = Re[k], 0<=k<n/2
+        FFT[2*k+1] = Im[k], 0<k<n/2
+        FFT[1] = Re[n/2]
+        e.g. for n=6:
+        FFT = { Re[0], Re[3], Re[1], Im[1], Re[2], Im[2] }
+
+		If n is odd then
+        FFT[2*k] = Re[k], 0<=k<(n+1)/2
+        FFT[2*k+1] = Im[k], 0<k<(n-1)/2
+        FFT[1] = Im[(n-1)/2]
+		e.g for n = 7:
+        FFT = { Re[0], Im[3], Re[1], Im[1], Re[2], Im[2], Re[3] }
+
+        See also: https://stackoverflow.com/a/5010434/3250500
+        */
+
+        final int n = FFT.length;
+        final int m = (int) Math.ceil((double) n / 2);
+		double[] FFTpow = new double[m];
 		double Re, Im;
 
-
-		output[0] = FFT[0];
-		for (int i = 1; i < m-1; i++) {
-			Re = FFT[i*2];
-			Im = FFT[i*2 + 1];
-			output[i] = Math.sqrt(Re * Re + Im * Im);
-		}
-		// highest frequency will be
-		output[m-1] = Math.sqrt(FFT[1] * FFT[1] + FFT[m] * FFT[m]);
-		return output;
-	}
-
-	/*
-	 * Get FFT bins for each of the 3 axes, also combines them into 'mfft'.
-	 */
-	public static double[] calculateFFT3D(
-        double[] xArray, double[] yArray, double[] zArray, double[] vArray, int nFFT)
-    {
-        double[] features = new double[4*nFFT];
-		int n = xArray.length;
-		DoubleFFT_1D transformer = new DoubleFFT_1D(n);
-		double[] input = new double[n*2];
-
-		int m = 1 + (int) Math.floor(n/2); // output array size
-		double[] output = new double[m];
-
-        for (int i=0; i<n; i++) {
-        	input[i] = xArray[i];
+        FFTpow[0] = FFT[0] * FFT[0];
+        for (int i = 1; i < m-1; i++) {
+            Re = FFT[i*2];
+            Im = FFT[i*2 + 1];
+            FFTpow[i] = Re * Re + Im * Im;
         }
-		HanningWindow(input, n);
-		transformer.realForward(input);
-        output = getFFTmagnitude(input, n);  //! use input instead of output?
-        for (int i=0; i<nFFT; i++) {
-            features[i] = output[i];
+        // The last power is a bit tricky due to the weird layout of FFT
+        if (n % 2 == 0) {
+            Re = FFT[n-2];  // FFT[2*m-2]
+            Im = FFT[n-1];  // FFT[2*m-1]
+        } else {
+            Re = FFT[n-1];  // FFT[2*m-2]
+            Im = FFT[1];
+        }
+        FFTpow[m-1] = Re * Re + Im * Im;
+
+        if (normalize) {
+            // Divide by length of the signal
+            for (int i=0; i<m; i++) FFTpow[i] /= n;
         }
 
-        input = new double[n*2];
-        for (int i=0; i<n; i++) {
-        	input[i] = yArray[i];
-        }
-		HanningWindow(input, n);
-		transformer.realForward(input);
-        input = getFFTmagnitude(input, n);
-        for (int i=0; i<nFFT; i++) {
-            features[nFFT+i] = input[i];
-        }
-
-        input = new double[n*2];
-        for (int i=0; i<n; i++) {
-        	input[i] = zArray[i];
-        }
-		HanningWindow(input, n);
-		transformer.realForward(input);
-        input = getFFTmagnitude(input, n);
-        for (int i=0; i<nFFT; i++) {
-            features[2*nFFT+i] = input[i];
-        }
-
-        input = new double[n*2];
-        for (int i=0; i<n; i++) {
-            input[i] = vArray[i];
-        }
-        HanningWindow(input, n);
-        transformer.realForward(input);
-        input = getFFTmagnitude(input, n);
-        for (int i=0; i<nFFT; i++) {
-            features[3*nFFT+i] = input[i];
-        }
-
-        return features;
-
-	}
-
-    /* From paper:
-	 * Physical Activity Classification using the GENEA Wrist Worn Accelerometer
-	 * Shaoyan Zhang, Alex V. Rowlands, Peter Murray, Tina Hurst
-     * https://www.ncbi.nlm.nih.gov/pubmed/21988935
-	 */
-    public static double [] calculateUnileverFeatures(double[] vArray, int sampleRate)
-    {
-		int n = vArray.length;
-		double FFTinterval = sampleRate / (1.0 * n); // (Hz)
-		double binSize = 0.1; // desired size of each FFT bin (Hz)
-		double maxFreq = 15; // min and max for searching for dominant frequency
-		double minFreq = 0.3;
-
-		int numBins = (int) Math.ceil((maxFreq-minFreq)/binSize);
-
-		DoubleFFT_1D transformer = new DoubleFFT_1D(n);
-		double[] vmFFT = new double[n * 2];
-		// set input data array
-        for (int c = 0; c < n; c++) {
-        	// NOTE: this code will generate peaks at 10Hz, and 2Hz (as expected).
-        	// Math.sin(c * 2 * Math.PI * 10 / intendedSampleRate) + Math.cos(c * 2 * Math.PI * 2 / intendedSampleRate);
-        	vmFFT[c] = vArray[c];
-        }
-
-		HanningWindow(vmFFT, n);
-        // FFT
-		transformer.realForward(vmFFT);
-
-        // find dominant frequency, second dominant frequency, and dominant between .6 - 2.5Hz
- 		double f1=-1, f2=-1, f625=-1, f33=-1;
- 		double p1=0, p2=0, p625=0, p33=0;
-
- 		double totalPower = 0;
-		int out_n = (int) Math.ceil(n/2); // output array size
-
- 		for (int i = 1; i < out_n; i++) {
- 			double freq = FFTinterval * i;
- 			if (freq<minFreq || freq>maxFreq) continue;
-        	double mag = Math.sqrt(vmFFT[i*2]*vmFFT[i*2] + vmFFT[i*2+1]*vmFFT[i*2+1]);///(n/2);
-        	totalPower += mag;
-        	if (mag>p1) {
-        		f2 = f1;
-        		p2 = p1;
-        		f1 = freq;
-        		p1 = mag;
-        	} else if (mag > p2) {
-        		f2 = freq;
-        		p2 = mag;
-        	}
-        	if (mag>p625 && freq > 0.6 && freq < 2.5) {
-        		f625 = freq;
-        		p625 = mag;
-        	}
-
-        	int w = 20;
-            int a = (int) Math.round(Math.abs(mag)*10);
-        }
-
-        double[] feats = { f1, p1, f2, p2, f625, p625, totalPower };
-
-        return feats;
-
+        return FFTpow;
 	}
 
     private static double norm(double x, double y, double z)
@@ -629,17 +560,17 @@ public class FeatureExtractor {
         }
     }
 
-    public static double[] norm(double[] xArray, double[] yArray, double[] zArray)
+    public static double[] norm(double[] x, double[] y, double[] z)
     {
-        double x, y, z;
-        double[] arr = new double[xArray.length];
-        for (int i=0; i<xArray.length; i++) {
-            x = xArray[i];
-            y = yArray[i];
-            z = zArray[i];
-            arr[i] = norm(x, y, z);
+        double xi, yi, zi;
+        double[] v = new double[x.length];
+        for (int i=0; i<x.length; i++) {
+            xi = x[i];
+            yi = y[i];
+            zi = z[i];
+            v[i] = norm(xi, yi, zi);
         }
-        return arr;
+        return v;
     }
 
 	private static void abs(double[] vals) {
@@ -647,12 +578,6 @@ public class FeatureExtractor {
 			vals[c] = Math.abs(vals[c]);
 		}
 	}
-
-    private static void trunc(double[] vals) {
-        for (int i=0; i<vals.length; i++) {
-            vals[i] = Math.max(vals[i], 0);
-        }
-    }
 
 	private static double sum(double[] vals) {
 		if (vals.length == 0) {
@@ -796,7 +721,7 @@ public class FeatureExtractor {
 		return cov;
 	}
 
-	/*
+	/**
 	 * Implementation of the following features aims to match the paper:
 	 * Hip and Wrist Accelerometer Algorithms for Free-Living Behavior Classification
 	 * Katherine Ellis, Jacqueline Kerr, Suneeta Godbole, John Staudenmayer, and Gert Lanckriet
@@ -877,10 +802,18 @@ public class FeatureExtractor {
 		}
     }
 
-    private static void minusOne(double[] vals){
-        for (int i=0; i<vals.length; i++){
-            vals[i] = vals[i] - 1;
+    private static double[] concat(double[]... arrays) {
+        int length = 0;
+        for (double[] array : arrays) length += array.length;
+        double[] result = new double[length];
+        int pos = 0;
+        for (double[] array: arrays) {
+            for (double element : array) {
+                result[pos] = element;
+                pos++;
+            }
         }
+        return result;
     }
 
 }
