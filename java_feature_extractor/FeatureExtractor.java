@@ -262,7 +262,7 @@ public class FeatureExtractor {
             if (p <= 0) continue;
             H += -p * Math.log(p + 1E-8);
         }
-        H /= Math.log(vFFTpow.length);  // Normalize spectral entropy
+        H /= Math.log(n);  // Normalize spectral entropy
 
         /*
         Find dominant frequencies overall, also between 0.3Hz and 3Hz
@@ -434,7 +434,7 @@ public class FeatureExtractor {
         double[] FFT = new double[2*n];  // zero-padded
         double[] features = new double[4*nFFT];
         double[] FFTmag = new double[n];
-        
+
         // FFT along x-axis
         for (int i=0; i<FFT.length; i++) { FFT[i] = 0; }
         for (int i=0; i<n; i++) { FFT[i] = x[i]; }
@@ -545,7 +545,7 @@ public class FeatureExtractor {
 
         if (normalize) {
             // Divide by length of the signal
-            for (int i=0; i<m; i++) FFTpow[i] /= n;
+            for (int i=0; i<m; i++) FFTpow[i] /= n*n;
         }
 
         return FFTpow;
