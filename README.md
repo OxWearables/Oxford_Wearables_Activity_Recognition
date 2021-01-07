@@ -14,5 +14,4 @@ The code for feature extraction is written in Java (distilled from
 
 ##### Datasets
 
-To run all the notebooks, you will need `capture24_small.npz` and `X_raw_small.npy`.
-These can be found in `/well/doherty/projects/cdt_data_challenge` (Nov 05, 2019).
+To run all the notebooks, you will need `capture24.npz` and `X_raw.npy`.
