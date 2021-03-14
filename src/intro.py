@@ -1,6 +1,6 @@
 # %% [markdown]
 '''
-# Activity classification on the Capture24 dataset
+# Activity recognition on the Capture24 dataset
 
 <img src="wrist_accelerometer.jpg" width="300"/>
 
@@ -221,19 +221,22 @@ scatter_plot(X_tsne_pca, Y)
 '''
 # Feature extraction
 Let's extract some commonly used timeseries features from each activity
-window. Feel free to modify and add your own features below.
+window. Feel free to engineer your own features!
 '''
 
 # %%
 
 def extract_features(X):
+    ''' Extract timeseries features for each window (row of X) '''
+
     X_feats = []
 
-    for xyz in X:
+    for xyz in tqdm(X):
         feats = {}
         feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
         feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
         feats['xRange'], feats['yRange'], feats['zRange'] = np.ptp(xyz, axis=0)
+        feats['xIQR'], feats['yIQR'], feats['zIQR'] = stats.iqr(xyz, axis=0)
 
         x, y, z = xyz.T
 
@@ -246,6 +249,8 @@ def extract_features(X):
 
         feats['mean'] = np.mean(m)
         feats['std'] = np.std(m)
+        feats['range'] = np.ptp(m)
+        feats['iqr'] = stats.iqr(m)
         feats['mad'] = stats.median_abs_deviation(m)
         feats['kurt'] = stats.kurtosis(m)
         feats['skew'] = stats.skew(m)
@@ -322,13 +327,17 @@ print(metrics.classification_report(Y2, clf.predict(X2_feats)))
 The overall classification performance is much worse on the held-out subject.
 As we expected, "sleep" classification remains quite good (f1-score of 0.90).
 
-### Exercise
+### Next steps
 So far we've only looked at one subject. To use the whole dataset, repeat the
 procedure per subject and concatenate the data, but beware of memory
 issues. Below is a sample code that uses `np.memmap` to store the windows
 directly onto disk. You're encouraged to re-run this notebook on more
 subjects, explore different labels and define your own by modifying the file
 *annotation-label-dictionary.csv*.
+
+*Note:* To save you some time, we have already extracted the dataset and saved
+it at `dataset/`. But if you plan to use your own annotation-label scheme, or
+different window lengths, then you'll need to adapt and run the code below.
 
 '''
 
@@ -337,9 +346,9 @@ subjects, explore different labels and define your own by modifying the file
 def multi_extract_windows(outdir):
 
     X_DTYPE = 'f8'
-    Y_DTYPE = 'S20'
+    Y_DTYPE = 'U20'
     T_DTYPE = 'datetime64[ns]'
-    P_DTYPE = 'S3'
+    P_DTYPE = 'U3'
     X_ROWSHAPE = (3000,3)
 
     n_old = n_new = 0
@@ -380,12 +389,6 @@ def multi_extract_windows(outdir):
 
     X_shape = (n_new,) + X_ROWSHAPE
     Y_shape = T_shape = P_shape = (n_new,)
-    print(f'Output files saved in {outdir}')
-    print(os.listdir(outdir))
-    print('X shape:', Xmap.shape)
-    print('Y shape:', Ymap.shape)
-    print('T shape:', Tmap.shape)
-    print('P shape:', Pmap.shape)
 
     info = { 'X_shape': X_shape, 'X_dtype': X_DTYPE,
              'Y_shape': Y_shape, 'Y_dtype': Y_DTYPE,
@@ -395,23 +398,33 @@ def multi_extract_windows(outdir):
     with open(os.path.join(outdir, 'info.json'), 'w') as f:
         json.dump(info, f)
 
+    print(f'Output files saved in {outdir}')
+    print(os.listdir(outdir))
+
+    print('X shape:', Xmap.shape)
+    print('Y shape:', Ymap.shape)
+    print('T shape:', Tmap.shape)
+    print('P shape:', Pmap.shape)
+
     return info
     
-# Extract windows and save in dataset/
-OUTDIR = 'dataset/'
-os.system(f'mkdir -p {OUTDIR}')
-info = multi_extract_windows(OUTDIR)
+# # Extract windows and save in dataset/
+# OUTDIR = 'dataset/'
+# os.system(f'mkdir -p {OUTDIR}')
+# multi_extract_windows(OUTDIR)
 
-# Check that extraction worked
-print('\nReloading memmap data')
-X = np.memmap(OUTDIR+'X.dat', mode='r', dtype=info['X_dtype'], shape=info['X_shape'])
-Y = np.memmap(OUTDIR+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=info['Y_shape'])
-T = np.memmap(OUTDIR+'T.dat', mode='r', dtype=info['T_dtype'], shape=info['T_shape'])
-P = np.memmap(OUTDIR+'P.dat', mode='r', dtype=info['P_dtype'], shape=info['P_shape'])
-print('X shape:', X.shape)
-print('Y shape:', Y.shape)
-print('T shape:', T.shape)
-print('P shape:', P.shape)
+# # Check that extraction worked
+# print('\nReloading memmap data')
+# with open(OUTDIR+'info.json', 'r') as f:
+#     info = json.load(f)  # load metadata
+# X = np.memmap(OUTDIR+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
+# Y = np.memmap(OUTDIR+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
+# T = np.memmap(OUTDIR+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
+# P = np.memmap(OUTDIR+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+# print('X shape:', X.shape)
+# print('Y shape:', Y.shape)
+# print('T shape:', T.shape)
+# print('P shape:', P.shape)
 
 # %% [markdown]
 '''
