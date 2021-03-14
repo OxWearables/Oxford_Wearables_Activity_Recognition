@@ -25,6 +25,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from tqdm.auto import tqdm
+import utils  # helper functions -- check out utils.py
 
 # For reproducibility
 np.random.seed(42)
@@ -42,7 +43,7 @@ print(f'Content of {DATASET_PATH}')
 print(os.listdir(DATASET_PATH))
 
 with open(DATASET_PATH+'info.json', 'r') as f:
-    info = json.load(f)
+    info = json.load(f)  # load metadata
 
 X = np.memmap(DATASET_PATH+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
 Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
@@ -58,52 +59,16 @@ print('P shape:', P.shape)
 # %% [markdown]
 '''
 ## Feature extraction
-Feel free to engineer your own features!
+The feature extraction code used in the previous section can also be found in
+*utils.py* file. Feel free to engineer your own features!
 
 *Note: this may take a while*
 '''
 
 # %%
 
-def extract_features(X):
-    ''' Extract timeseries features for each window (row of X) '''
-
-    X_feats = []
-
-    for xyz in tqdm(X):
-        feats = {}
-        feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
-        feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
-        feats['xRange'], feats['yRange'], feats['zRange'] = np.ptp(xyz, axis=0)
-        feats['xIQR'], feats['yIQR'], feats['zIQR'] = stats.iqr(xyz, axis=0)
-
-        x, y, z = xyz.T
-
-        with np.errstate(divide='ignore', invalid='ignore'):  # ignore div by 0 warnings
-            feats['xyCorr'] = np.nan_to_num(np.corrcoef(x, y)[0,1])
-            feats['yzCorr'] = np.nan_to_num(np.corrcoef(y, z)[0,1])
-            feats['zxCorr'] = np.nan_to_num(np.corrcoef(z, x)[0,1])
-
-        m = np.linalg.norm(xyz, axis=1)
-
-        feats['mean'] = np.mean(m)
-        feats['std'] = np.std(m)
-        feats['range'] = np.ptp(m)
-        feats['iqr'] = stats.iqr(m)
-        feats['mad'] = stats.median_abs_deviation(m)
-        feats['kurt'] = stats.kurtosis(m)
-        feats['skew'] = stats.skew(m)
-
-        X_feats.append(feats)
-
-    X_feats = pd.DataFrame(X_feats)
-
-    return X_feats
-
-# %%
-
 # # Extract features
-# X_feats = extract_features(X)
+# X_feats = pd.DataFrame([utils.extract_features(x) for x in X])
 
 # # (Optional) Save to disk to avoid recomputation in future runs
 # X_feats.to_pickle('X_feats.pkl')
@@ -123,7 +88,8 @@ values per window &mdash; a reduction of about 400 times.
 
 # %%
 
-test_ids = ['002', '003', '004', '005', '006']
+test_ids = ['002', '003', '004', '005', '006', 
+            '007', '008', '009', '010', '011']
 mask_test = np.isin(P, test_ids)
 mask_train = ~mask_test
 X_train, Y_train, P_train, T_train = \
@@ -168,12 +134,8 @@ print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred))
 # %% [markdown]
 '''
 Overall, the model seems to do well in distinguishing between very inactive
-instances ("sit-stand" and "sleep") and very active ones ("bicycling"), but there
+periods ("sit-stand" and "sleep") and very active ones ("bicycling"), but there
 seems to be confusion between the remaining activities.
-It performs particularly worse for the least popular class "vehicle" (the recruited
-subjects were from around Oxford and mostly healthy, so there were relatively few "vehicle"
-instances and relatively many "bicycling" instances compared to the general
-population).
 
 ## Plot predicted vs. true activity profiles
 
@@ -182,11 +144,8 @@ Using our utility function, let's plot the activity profile for participant
 '''
 
 # %%
-import plot_compare_activity
-from plot_compare_activity import plot_compare_activity
-
 mask = P_test=='006'
-plot_compare_activity(T_test[mask], 
+utils.plot_compare_activity(T_test[mask], 
                       Y_test[mask],
                       Y_test_pred[mask], 
                       X_test.loc[mask, 'mean'])
@@ -222,7 +181,7 @@ def mode(alist):
 
 def rolling_mode(t, y, window_size='100S'):
     y_dtype_orig = y.dtype
-    # Hack to make it work with pandas.Series.rolling() using codes
+    # Hack to make it work with pandas.Series.rolling()
     y = pd.Series(y, index=t, dtype='category')
     y_code_smooth = y.cat.codes.rolling(window_size).apply(mode, raw=True).astype('int')
     y_smooth = pd.Categorical.from_codes(y_code_smooth, dtype=y.dtype)
@@ -245,7 +204,7 @@ print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_smoo
 
 # Check again participant `006`
 mask = P_test=='006'
-plot_compare_activity(T_test[mask], 
+utils.plot_compare_activity(T_test[mask], 
                       Y_test[mask],
                       Y_test_pred_smooth[mask], 
                       X_test.loc[mask, 'mean'])
@@ -270,6 +229,7 @@ def train_hmm(Y_prob, Y_true, uninformative_prior=True):
     ''' https://en.wikipedia.org/wiki/Hidden_Markov_model '''
 
     labels = np.unique(Y_true)
+    nlabels = len(labels)
 
     if uninformative_prior:  
         # All labels with equal probability
@@ -277,35 +237,53 @@ def train_hmm(Y_prob, Y_true, uninformative_prior=True):
     else:
         # Label probability equals observed rate
         prior = np.mean(Y_true.reshape(-1,1)==labels, axis=0)
-    # Emission matrix
-    emission = np.vstack([np.mean(Y_prob[Y_true==label], axis=0) for label in labels])
-    # Transition matrix
-    transition = np.vstack([np.mean(Y_true[1:][(Y_true==label)[:-1]].reshape(-1,1)==labels, axis=0) for label in labels])
-    # Attach labels
-    prior = pd.Series(prior, index=labels)
-    emission = pd.DataFrame(emission, index=labels, columns=labels)
-    transition = pd.DataFrame(transition, index=labels, columns=labels)
 
-    return prior, emission, transition
+    emission = np.vstack(
+        [np.mean(Y_prob[Y_true==label], axis=0) for label in labels]
+    )
+    transition = np.vstack(
+        [np.mean(Y_true[1:][(Y_true==label)[:-1]].reshape(-1,1)==labels, axis=0)
+            for label in labels]
+    )
+
+    params = {'prior':prior, 'emission':emission, 'transition':transition, 'labels':labels}
+
+    return params
 
 
-def viterbi(Y_obs, prior, emission, transition):
+def viterbi(Y_obs, hmm_params):
     ''' https://en.wikipedia.org/wiki/Viterbi_algorithm '''
 
     def log(x):
         SMALL_NUMBER = 1e-16
         return np.log(x + SMALL_NUMBER)
 
-    probs = pd.DataFrame(np.zeros((len(Y_obs), len(prior))), columns=prior.index)
-    probs.iloc[0] = log(prior) + log(emission[Y_obs[0]])
-    for j in range(1, len(Y_obs)):
-        for label in probs.columns:
-            probs.at[j, label] = (log(emission.at[label, Y_obs[j]]) + log(transition[label]) + probs.iloc[j-1]).max()
+    prior = hmm_params['prior']
+    emission = hmm_params['emission']
+    transition = hmm_params['transition']
+    labels = hmm_params['labels']
 
-    viterbi_path = np.empty_like(Y_obs, dtype=Y_obs.dtype)
-    viterbi_path[-1] = probs.iloc[-1].idxmax(axis='columns')
-    for j in reversed(range(len(Y_obs)-1)):
-        viterbi_path[j] = (log(transition[viterbi_path[j+1]]) + probs.iloc[j]).idxmax(axis='columns')
+    nobs = len(Y_obs)
+    nlabels = len(labels)
+
+    Y_obs = np.where(Y_obs.reshape(-1,1)==labels)[1]  # to numeric
+
+    probs = np.zeros((nobs, nlabels))
+    probs[0,:] = log(prior) + log(emission[:, Y_obs[0]])
+    for j in range(1, nobs):
+        for i in range(nlabels):
+            probs[j,i] = np.max(
+                log(emission[i, Y_obs[j]]) + \
+                log(transition[:, i]) + \
+                probs[j-1,:])  # probs already in log scale
+    viterbi_path = np.zeros_like(Y_obs)
+    viterbi_path[-1] = np.argmax(probs[-1,:])
+    for j in reversed(range(nobs-1)):
+        viterbi_path[j] = np.argmax(
+            log(transition[:, viterbi_path[j+1]]) + \
+            probs[j,:])  # probs already in log scale
+
+    viterbi_path = labels[viterbi_path]  # to labels
 
     return viterbi_path
 
@@ -315,22 +293,21 @@ def viterbi(Y_obs, prior, emission, transition):
 # random forest training. Question: Why is it preferable over 
 # Y_train_prob = clf.predict_proba(X_train)?
 Y_train_prob = clf.oob_decision_function_  # out-of-bag probability predictions
-prior, emission, transition = train_hmm(Y_train_prob, Y_train)  # obtain HMM matrices/params
-Y_test_pred_hmm = viterbi(Y_test_pred, prior, emission, transition)  # smoothing
+hmm_params = train_hmm(Y_train_prob, Y_train)  # obtain HMM matrices/params
+Y_test_pred_hmm = viterbi(Y_test_pred, hmm_params)  # smoothing
 print('\nClassifier performance -- HMM smoothing')
 print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_hmm)) 
 
 # Check again participant `006`
 mask = P_test=='006'
-plot_compare_activity(T_test[mask], 
+utils.plot_compare_activity(T_test[mask], 
                       Y_test[mask],
                       Y_test_pred_hmm[mask], 
                       X_test.loc[mask, 'mean'])
 
 # %% [markdown]
 '''
-HMM further improves the performance overall, but classifying the rare class
-"vehicle" remains challenging.
+HMM further improves the performance overall.
 
 ## Is a simple logistic regression enough?
 
@@ -351,15 +328,15 @@ Y_test_pred_LR = pipe.predict(X_test)
 
 # HMM smoothing
 Y_train_LR_prob = pipe.predict_proba(X_train)  # sorry! LR doesn't provide OOB estimates for free
-prior, emission, transition = train_hmm(Y_train_LR_prob, Y_train)
-Y_test_pred_LR_hmm = viterbi(Y_test_pred_LR, prior, emission, transition)  # smoothing
+hmm_params_LR = train_hmm(Y_train_LR_prob, Y_train)
+Y_test_pred_LR_hmm = viterbi(Y_test_pred_LR, hmm_params_LR)  # smoothing
 
 print('\nClassifier performance -- Logistic regression')
 print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_LR_hmm)) 
 
 # Check again participant `006`
 mask = P_test=='006'
-plot_compare_activity(T_test[mask], 
+utils.plot_compare_activity(T_test[mask], 
                       Y_test[mask],
                       Y_test_pred_LR_hmm[mask], 
                       X_test.loc[mask, 'mean'])
@@ -367,8 +344,8 @@ plot_compare_activity(T_test[mask],
 # %% [markdown]
 '''
 
-The logistic regression model is consistently worse in all classes. While
-scores for the easy classes "sit-stand" and "sleep" remain high, the
-scores for the remaining classes are notably worse.
+The logistic regression model performs notably worse.
 
 '''
+
+# %%
