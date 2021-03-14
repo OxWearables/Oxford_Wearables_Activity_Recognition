@@ -1,6 +1,6 @@
 # %% [markdown]
 '''
-# Activity classification on the Capture24 dataset
+# Activity recognition on the Capture24 dataset
 
 <img src="wrist_accelerometer.jpg" width="300"/>
 
@@ -221,42 +221,40 @@ scatter_plot(X_tsne_pca, Y)
 '''
 # Feature extraction
 Let's extract some commonly used timeseries features from each activity
-window. Feel free to modify and add your own features below.
+window. Feel free to engineer your own features!
 '''
 
 # %%
 
-def extract_features(X):
-    X_feats = []
+def extract_features(xyz):
+    ''' Extract timeseries features. xyz is a window of shape (N,3) '''
+    
+    feats = {}
+    feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
+    feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
+    feats['xRange'], feats['yRange'], feats['zRange'] = np.ptp(xyz, axis=0)
+    feats['xIQR'], feats['yIQR'], feats['zIQR'] = stats.iqr(xyz, axis=0)
 
-    for xyz in X:
-        feats = {}
-        feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
-        feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
-        feats['xRange'], feats['yRange'], feats['zRange'] = np.ptp(xyz, axis=0)
+    x, y, z = xyz.T
 
-        x, y, z = xyz.T
+    with np.errstate(divide='ignore', invalid='ignore'):  # ignore div by 0 warnings
+        feats['xyCorr'] = np.nan_to_num(np.corrcoef(x, y)[0,1])
+        feats['yzCorr'] = np.nan_to_num(np.corrcoef(y, z)[0,1])
+        feats['zxCorr'] = np.nan_to_num(np.corrcoef(z, x)[0,1])
 
-        with np.errstate(divide='ignore', invalid='ignore'):  # ignore div by 0 warnings
-            feats['xyCorr'] = np.nan_to_num(np.corrcoef(x, y)[0,1])
-            feats['yzCorr'] = np.nan_to_num(np.corrcoef(y, z)[0,1])
-            feats['zxCorr'] = np.nan_to_num(np.corrcoef(z, x)[0,1])
+    m = np.linalg.norm(xyz, axis=1)
 
-        m = np.linalg.norm(xyz, axis=1)
+    feats['mean'] = np.mean(m)
+    feats['std'] = np.std(m)
+    feats['range'] = np.ptp(m)
+    feats['iqr'] = stats.iqr(m)
+    feats['mad'] = stats.median_abs_deviation(m)
+    feats['kurt'] = stats.kurtosis(m)
+    feats['skew'] = stats.skew(m)
 
-        feats['mean'] = np.mean(m)
-        feats['std'] = np.std(m)
-        feats['mad'] = stats.median_abs_deviation(m)
-        feats['kurt'] = stats.kurtosis(m)
-        feats['skew'] = stats.skew(m)
+    return feats
 
-        X_feats.append(feats)
-
-    X_feats = pd.DataFrame(X_feats)
-
-    return X_feats
-
-X_feats = extract_features(X)
+X_feats = pd.DataFrame([extract_features(x) for x in X])
 print(X_feats)
 
 # %% [markdown]
@@ -312,7 +310,7 @@ data2['label'] = anno_label_dict.loc[data2['annotation'], 'label:Willetts2018'].
 # Extract 30s windows
 X2, Y2, T2 = extract_windows(data2, window_len='30s')
 # Extract features
-X2_feats = extract_features(X2)
+X2_feats = pd.DataFrame([extract_features(x) for x in X2])
 
 print('\nClassifier performance on held-out subject')
 print(metrics.classification_report(Y2, clf.predict(X2_feats)))
@@ -322,13 +320,18 @@ print(metrics.classification_report(Y2, clf.predict(X2_feats)))
 The overall classification performance is much worse on the held-out subject.
 As we expected, "sleep" classification remains quite good (f1-score of 0.90).
 
-### Exercise
+### Next steps
 So far we've only looked at one subject. To use the whole dataset, repeat the
 procedure per subject and concatenate the data, but beware of memory
 issues. Below is a sample code that uses `np.memmap` to store the windows
-directly onto disk. You're encouraged to re-run this notebook on more
-subjects, explore different labels and define your own by modifying the file
+directly onto disk. Re-run this notebook on more subjects, explore different
+labels and define your own by modifying the file
 *annotation-label-dictionary.csv*.
+
+To save you some time, we have already extracted the dataset with
+Willetts2018 labels and saved it in `dataset/`. But if you plan to use your
+own annotation-label scheme or change the window lengths, then you'll need to
+adapt and run the code below.
 
 '''
 
@@ -337,9 +340,9 @@ subjects, explore different labels and define your own by modifying the file
 def multi_extract_windows(outdir):
 
     X_DTYPE = 'f8'
-    Y_DTYPE = 'S20'
+    Y_DTYPE = 'U20'
     T_DTYPE = 'datetime64[ns]'
-    P_DTYPE = 'S3'
+    P_DTYPE = 'U3'
     X_ROWSHAPE = (3000,3)
 
     n_old = n_new = 0
@@ -380,12 +383,6 @@ def multi_extract_windows(outdir):
 
     X_shape = (n_new,) + X_ROWSHAPE
     Y_shape = T_shape = P_shape = (n_new,)
-    print(f'Output files saved in {outdir}')
-    print(os.listdir(outdir))
-    print('X shape:', Xmap.shape)
-    print('Y shape:', Ymap.shape)
-    print('T shape:', Tmap.shape)
-    print('P shape:', Pmap.shape)
 
     info = { 'X_shape': X_shape, 'X_dtype': X_DTYPE,
              'Y_shape': Y_shape, 'Y_dtype': Y_DTYPE,
@@ -395,23 +392,33 @@ def multi_extract_windows(outdir):
     with open(os.path.join(outdir, 'info.json'), 'w') as f:
         json.dump(info, f)
 
+    print(f'Output files saved in {outdir}')
+    print(os.listdir(outdir))
+
+    print('X shape:', Xmap.shape)
+    print('Y shape:', Ymap.shape)
+    print('T shape:', Tmap.shape)
+    print('P shape:', Pmap.shape)
+
     return info
     
-# Extract windows and save in dataset/
-OUTDIR = 'dataset/'
-os.system(f'mkdir -p {OUTDIR}')
-info = multi_extract_windows(OUTDIR)
+# # Extract windows and save in dataset/
+# OUTDIR = 'dataset/'
+# os.system(f'mkdir -p {OUTDIR}')
+# multi_extract_windows(OUTDIR)
 
-# Check that extraction worked
-print('\nReloading memmap data')
-X = np.memmap(OUTDIR+'X.dat', mode='r', dtype=info['X_dtype'], shape=info['X_shape'])
-Y = np.memmap(OUTDIR+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=info['Y_shape'])
-T = np.memmap(OUTDIR+'T.dat', mode='r', dtype=info['T_dtype'], shape=info['T_shape'])
-P = np.memmap(OUTDIR+'P.dat', mode='r', dtype=info['P_dtype'], shape=info['P_shape'])
-print('X shape:', X.shape)
-print('Y shape:', Y.shape)
-print('T shape:', T.shape)
-print('P shape:', P.shape)
+# # Check that extraction worked
+# print('\nReloading memmap data')
+# with open(OUTDIR+'info.json', 'r') as f:
+#     info = json.load(f)  # load metadata
+# X = np.memmap(OUTDIR+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
+# Y = np.memmap(OUTDIR+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
+# T = np.memmap(OUTDIR+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
+# P = np.memmap(OUTDIR+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+# print('X shape:', X.shape)
+# print('Y shape:', Y.shape)
+# print('T shape:', T.shape)
+# print('P shape:', P.shape)
 
 # %% [markdown]
 '''
@@ -421,6 +428,21 @@ print('P shape:', P.shape)
     - [A universal, accurate intensity-based classification of different physical activities using raw data of accelerometer](https://www.ncbi.nlm.nih.gov/pubmed/24393233)
     - [Activity recognition using a single accelerometer placed at the wrist or ankle](https://www.ncbi.nlm.nih.gov/pubmed/23604069)
     - [Hip and Wrist Accelerometer Algorithms for Free-Living Behavior Classification](https://www.ncbi.nlm.nih.gov/pubmed/26673126)
+
+- Papers using the capture24 dataset:
+    - [Reallocating time from machine-learned sleep, sedentary behaviour or
+    light physical activity to moderate-to-vigorous physical activity is
+    associated with lower cardiovascular disease
+    risk](https://www.medrxiv.org/content/10.1101/2020.11.10.20227769v2.full?versioned=true)
+    (Walmsley2020 labels) 
+    - [GWAS identifies 14 loci for device-measured
+    physical activity and sleep
+    duration](https://www.nature.com/articles/s41467-018-07743-4)
+    (Doherty2018 labels)
+    - [Statistical machine learning of sleep and physical activity phenotypes
+    from sensor data in 96,220 UK Biobank
+    participants](https://www.nature.com/articles/s41598-018-26174-1)
+    (Willetts2018 labels)
 
 '''
 # %%
