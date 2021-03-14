@@ -292,7 +292,7 @@ clf = BalancedRandomForestClassifier(
 clf.fit(X_feats, Y)
 
 print('\nClassifier performance in training set')
-print(metrics.classification_report(Y, clf.predict(X_feats)))
+print(metrics.classification_report(Y, clf.predict(X_feats), zero_division=0))
 
 # %% [markdown]
 '''
@@ -313,7 +313,7 @@ X2, Y2, T2 = extract_windows(data2, window_len='30s')
 X2_feats = pd.DataFrame([extract_features(x) for x in X2])
 
 print('\nClassifier performance on held-out subject')
-print(metrics.classification_report(Y2, clf.predict(X2_feats)))
+print(metrics.classification_report(Y2, clf.predict(X2_feats), zero_division=0))
 
 # %% [markdown]
 '''
