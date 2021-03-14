@@ -1,248 +1,374 @@
-# %%
+# %% [markdown]
 '''
-# Activity recognition on the Capture24 dataset
+# Random forest + temporal smoothing 
 
-We aim to build a machine learning model to recognize
-activities from wrist-worn accelerometer measurements.
-Our baseline model is a random forest trained to classify instances of 30
-seconds of activity, trained on the hand-crafted features `X_feats`. Further,
-we use a Hidden Markov Model to account for temporal dependencies to smooth
-the predictions of the random forest.
+In this section, we will train a random forest on the extracted windows
+from the previous section. We will explore ways to account for the temporal
+dependency such as mode smoothing and hidden Markov model.
 
-###### Setup
+## Setup
 '''
 
 # %%
+import os
+import time
+import re
+import json
 import numpy as np
-from scipy.stats import mode
-from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+import scipy.stats as stats
+import scipy.signal as signal
+import matplotlib.pyplot as plt
+from imblearn.ensemble import BalancedRandomForestClassifier
+from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
-import utils  # contains helper functions for this workshop -- check utils.py
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from tqdm.auto import tqdm
 
 # For reproducibility
 np.random.seed(42)
 
-# %%
-''' ###### Load dataset and hold out some instances for testing '''
+# %% [markdown]
+''' 
+## Load dataset 
+'''
 
 # %%
-data = np.load('capture24.npz', allow_pickle=True)
-# data = np.load('capture24_small.npz', allow_pickle=True)
-print("Contents of capture24.npz:", data.files)
-X, y, pid, time = data['X_feats'], data['y'], data['pid'], data['time']
 
-# Hold out some participants for testing the model
-pids_test = [2, 3]  # participants 2 & 3
-mask_test = np.isin(pid, pids_test)
+# Path to your extracted windows
+DATASET_PATH = 'dataset/'
+print(f'Content of {DATASET_PATH}')
+print(os.listdir(DATASET_PATH))
+
+with open(DATASET_PATH+'info.json', 'r') as f:
+    info = json.load(f)
+
+X = np.memmap(DATASET_PATH+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
+Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
+T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
+P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+
+print('X shape:', X.shape)
+print('Y shape:', Y.shape)
+print('T shape:', T.shape)
+print('P shape:', P.shape)
+
+
+# %% [markdown]
+'''
+## Feature extraction
+Feel free to engineer your own features!
+
+*Note: this may take a while*
+'''
+
+# %%
+
+def extract_features(X):
+    ''' Extract timeseries features for each window (row of X) '''
+
+    X_feats = []
+
+    for xyz in tqdm(X):
+        feats = {}
+        feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
+        feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
+        feats['xRange'], feats['yRange'], feats['zRange'] = np.ptp(xyz, axis=0)
+        feats['xIQR'], feats['yIQR'], feats['zIQR'] = stats.iqr(xyz, axis=0)
+
+        x, y, z = xyz.T
+
+        with np.errstate(divide='ignore', invalid='ignore'):  # ignore div by 0 warnings
+            feats['xyCorr'] = np.nan_to_num(np.corrcoef(x, y)[0,1])
+            feats['yzCorr'] = np.nan_to_num(np.corrcoef(y, z)[0,1])
+            feats['zxCorr'] = np.nan_to_num(np.corrcoef(z, x)[0,1])
+
+        m = np.linalg.norm(xyz, axis=1)
+
+        feats['mean'] = np.mean(m)
+        feats['std'] = np.std(m)
+        feats['range'] = np.ptp(m)
+        feats['iqr'] = stats.iqr(m)
+        feats['mad'] = stats.median_abs_deviation(m)
+        feats['kurt'] = stats.kurtosis(m)
+        feats['skew'] = stats.skew(m)
+
+        X_feats.append(feats)
+
+    X_feats = pd.DataFrame(X_feats)
+
+    return X_feats
+
+# %%
+
+# # Extract features
+# X_feats = extract_features(X)
+
+# # (Optional) Save to disk to avoid recomputation in future runs
+# X_feats.to_pickle('X_feats.pkl')
+
+# Reload features
+X_feats = pd.read_pickle('X_feats.pkl')
+
+print(X_feats)
+
+# %% [markdown]
+'''
+Note the great dimensionality reduction, from $3000 \times 3$ to just $22$
+values per window &mdash; a reduction of about 400 times.
+
+## Train/test split
+'''
+
+# %%
+
+test_ids = ['002', '003', '004', '005', '006']
+mask_test = np.isin(P, test_ids)
 mask_train = ~mask_test
-X_train, y_train, pid_train, time_train = \
-    X[mask_train], y[mask_train], pid[mask_train], time[mask_train]
-X_test, y_test, pid_test, time_test = \
-    X[mask_test], y[mask_test], pid[mask_test], time[mask_test]
+X_train, Y_train, P_train, T_train = \
+    X_feats[mask_train], Y[mask_train], P[mask_train], T[mask_train]
+X_test, Y_test, P_test, T_test = \
+    X_feats[mask_test], Y[mask_test], P[mask_test], T[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
-# %%
-''' ###### Train a random forest classifier
+# %% [markdown]
+''' 
+## Train a random forest classifier
 
-*Note: this takes a few minutes*
+*Note: this may take a while*
 '''
 
 # %%
 # Argument oob_score=True to be used for HMM smoothing (see below)
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
-classifier.fit(X_train, y_train)
-
-# %%
-''' ###### Evaluate model on held-out participants
-'''
-
-# %%
-y_test_pred = classifier.predict(X_test)
-print("\n--- Random forest performance ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_pred))
-
-# %%
-'''
-From the per-class recall scores, we see that the model does a descent job in
-detecting moderate activity and a very good job in detecting sleep and
-sedentary activities. However, the model has difficulty in detecting
-'tasks-light' activities.
-Also, because our dataset is highly unbalanced, we see a large difference
-between the (unbalanced) accuracy and balanced accuracy scores.
-
-###### Plot predicted and true activity timeseries
-
-Using our utility function, we plot the activity timeseries for participant #3. Here we also pass the first hand-crafted feature (first column of `X`) containing the mean acceleration for plotting.
-'''
-
-# %%
-# Activity plot for participant #3 -- predicted
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
+clf = BalancedRandomForestClassifier(
+    n_estimators=2000,
+    replacement=True,
+    sampling_strategy='not minority',
+    oob_score=True,
+    n_jobs=4,
+    random_state=42,
+    verbose=1
 )
-fig.suptitle('participant #3 - predicted', fontsize='small')
-fig.show()
+clf.fit(X_train, Y_train)
 
-# Activity plot for participant #3 -- ground truth
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test[pid_test==3], time_test[pid_test==3]
-)
-fig.suptitle('participant #3 - ground truth', fontsize='small')
-fig.show()
-
-# %%
+# %% [markdown]
 '''
-## Accounting for temporal dependencies to smooth the predictions
-
-The random forest classifier performs descently well.
-However, the model does not account for temporal dependencies since we simply
-trained it to independently classify intervals of 30 seconds of activity.
-This can be seen in the activity plot where the sleep period is not smooth.
-
-###### Mode filtering
-To account for the temporal component, we first consider smoothing the predictions
-by applying a mode filter, i.e. we pass a window (here of size 3) through the
-predicted activity timeseries and pick the most popular activity within the
-window.
-
-**Note:** As mentioned before, the provided arrays `X_feats`, `X_raw`, `y`, etc. are so that consecutive rows correspond to continuous measurements in time for a same participant.
-Discontinuities will naturally occur at the edges between two participants.
-Interrupts in the measurement within a same participant may also occur (e.g. device run out of battery).
-In the following time smoothing approaches we do not account for these interrupts &mdash; the number of these are negligible so we ignore them. You could properly account for these by looking at the `time` and `pid` arrays.
+## Model performance
 '''
-
 # %%
-y_test_modefilt = mode(
-    np.vstack((y_test_pred[:-2], y_test_pred[1:-1], y_test_pred[2:])),
-    axis=0)[0].ravel()
-y_test_modefilt = np.concatenate(([y_test_pred[0]], y_test_modefilt, [y_test_pred[-1]]))
-print("\n--- Random forest performance with mode filtering ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_modefilt))
 
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_modefilt[pid_test==3], time_test[pid_test==3]
-)
-fig.show()
+Y_train_pred = clf.predict(X_train)
+Y_test_pred = clf.predict(X_test)
+print('\nClassifier performance')
+print('In sample:\n', metrics.classification_report(Y_train, Y_train_pred))
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred)) 
 
-# %%
+# %% [markdown]
 '''
-###### Hidden Markov Model
+Overall, the model seems to do well in distinguishing between very inactive
+instances ("sit-stand" and "sleep") and very active ones ("bicycling"), but there
+seems to be confusion between the remaining activities.
+It performs particularly worse for the least popular class "vehicle" (the recruited
+subjects were from around Oxford and mostly healthy, so there were relatively few "vehicle"
+instances and relatively many "bicycling" instances compared to the general
+population).
+
+## Plot predicted vs. true activity profiles
+
+Using our utility function, let's plot the activity profile for participant
+`006`. Here we also pass the acceleration mean for plotting purposes.
 '''
 
 # %%
+import plot_compare_activity
+from plot_compare_activity import plot_compare_activity
+
+mask = P_test=='006'
+plot_compare_activity(T_test[mask], 
+                      Y_test[mask],
+                      Y_test_pred[mask], 
+                      X_test.loc[mask, 'mean'])
+
+
+# %% [markdown]
 '''
-We see that the simple mode smoothing improves the summary scores and the activity plot is now smoother.
+The predictions look good at first glance (after all, the majority of
+activities happen to be of the inactive type for which the model performs
+well &mdash; this is what the high `weighted avg` in the performance
+report reflects). But we find some awkward sequence of activities in the predictions,
+for example broken "sleep" patterns insterspersed with "sit-stand"
+activities. This is because the model does not account for the temporal
+dependency and treats the instances as independent from each other.
 
-A more principled approch is to use a Hidden Markov Model (HMM). Here we
-assume that the random forest predictions are mere "observations" of the
-"hidden ground truth".
-HMM requires that we obtain prior, emission and transition matrices. We can
-compute these using the ground truth labels `y_train` together with the
-classifier's probabilistic predictions on the training set (`predict_proba()`).
-We use our utility functions `train_hmm()` and `viterbi()` to obtain these matrices and smoothing &mdash; see `utils.py` for details.
-'''
+## Accounting for temporal dependency
 
-# %%
-Y_train_pred = classifier.predict_proba(X_train)  # probabilistic predictions -- this is a (N,5) array
-prior, emission, transition = utils.train_hmm(Y_train_pred, y_train)  # HMM training step
-y_test_hmm = utils.viterbi(y_test_pred, prior, emission, transition)  # smoothing
-print("\n--- Random forest performance with HMM smoothing (in-bag estimate) ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_hmm))
+### Rolling mode smoothing
+Let's use rolling mode smoothing to smooth the model predictions: Pick the
+most popular label within a rolling time window.
 
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_hmm[pid_test==3], time_test[pid_test==3]
-)
-fig.show()
-
-# %%
-'''
-The HMM smoothing further improves the scores and the activity plot is even smoother.
-
-Instead of using `predict_proba` on the same set that the model was trained on, the model conveniently provides out-of-bag probability estimates on the training set (enabled by passing the `oob_score=True` argument), accessible via the attribute `oob_decision_function_`. These estimations are closer to the actual out-of-sample performance of the model. We can use these to re-calculate the HMM parameters:
 '''
 
 # %%
-Y_oob = classifier.oob_decision_function_  # probabilistic predictions -- this is a (N,5) array
-prior, emission, transition = utils.train_hmm(Y_oob, y_train)  # HMM training step
-y_test_hmm_oob = utils.viterbi(y_test_pred, prior, emission, transition)  # smoothing
-print("\n--- Random forest performance with HMM smoothing (out-of-bag estimate) ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_hmm_oob))
 
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_hmm_oob[pid_test==3], time_test[pid_test==3]
-)
-fig.show()
+def mode(alist):
+    ''' Mode of a list, but return middle element if ambiguous '''
+    m, c = stats.mode(alist)
+    m, c = m.item(), c.item()
+    if c==1:
+        return alist[len(alist)//2]
+    return m
+
+def rolling_mode(t, y, window_size='100S'):
+    y_dtype_orig = y.dtype
+    # Hack to make it work with pandas.Series.rolling() using codes
+    y = pd.Series(y, index=t, dtype='category')
+    y_code_smooth = y.cat.codes.rolling(window_size).apply(mode, raw=True).astype('int')
+    y_smooth = pd.Categorical.from_codes(y_code_smooth, dtype=y.dtype)
+    y_smooth = np.asarray(y_smooth, dtype=y_dtype_orig)
+    return y_smooth
 
 # %%
+
+# Smooth the predictions of each participant
+Y_test_pred_smooth = []
+unqP, indP = np.unique(P_test, return_index=True)
+unqP = unqP[np.argsort(indP)]  # keep the order or else we'll scramble our arrays
+for p in unqP:
+    mask = P_test==p
+    Y_test_pred_smooth.append(rolling_mode(T_test[mask], Y_test_pred[mask]))
+Y_test_pred_smooth = np.concatenate(Y_test_pred_smooth)
+
+print('\nClassifier performance -- mode smoothing')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_smooth)) 
+
+# Check again participant `006`
+mask = P_test=='006'
+plot_compare_activity(T_test[mask], 
+                      Y_test[mask],
+                      Y_test_pred_smooth[mask], 
+                      X_test.loc[mask, 'mean'])
+
+# %% [markdown]
 '''
+### Hidden Markov Model
+
+A more principled approch is to use a Hidden Markov Model (HMM). 
+Here the random forest predictions are "observations" of the "hidden ground
+truth". The emission matrix can be obtained from probabilistic predictions of
+the classifier (`predict_proba()`), and the transition matrix can be obtained
+from the ground truth sequence of labels. The prior probabilities of the
+labels can be user-specified or set as the label rates observed in the
+dataset.
+
+'''
+
+# %%
+
+def train_hmm(Y_prob, Y_true, uninformative_prior=True):
+    ''' https://en.wikipedia.org/wiki/Hidden_Markov_model '''
+
+    labels = np.unique(Y_true)
+
+    if uninformative_prior:  
+        # All labels with equal probability
+        prior = np.ones(len(labels)) / len(labels)
+    else:
+        # Label probability equals observed rate
+        prior = np.mean(Y_true.reshape(-1,1)==labels, axis=0)
+    # Emission matrix
+    emission = np.vstack([np.mean(Y_prob[Y_true==label], axis=0) for label in labels])
+    # Transition matrix
+    transition = np.vstack([np.mean(Y_true[1:][(Y_true==label)[:-1]].reshape(-1,1)==labels, axis=0) for label in labels])
+    # Attach labels
+    prior = pd.Series(prior, index=labels)
+    emission = pd.DataFrame(emission, index=labels, columns=labels)
+    transition = pd.DataFrame(transition, index=labels, columns=labels)
+
+    return prior, emission, transition
+
+
+def viterbi(Y_obs, prior, emission, transition):
+    ''' https://en.wikipedia.org/wiki/Viterbi_algorithm '''
+
+    def log(x):
+        SMALL_NUMBER = 1e-16
+        return np.log(x + SMALL_NUMBER)
+
+    probs = pd.DataFrame(np.zeros((len(Y_obs), len(prior))), columns=prior.index)
+    probs.iloc[0] = log(prior) + log(emission[Y_obs[0]])
+    for j in range(1, len(Y_obs)):
+        for label in probs.columns:
+            probs.at[j, label] = (log(emission.at[label, Y_obs[j]]) + log(transition[label]) + probs.iloc[j-1]).max()
+
+    viterbi_path = np.empty_like(Y_obs, dtype=Y_obs.dtype)
+    viterbi_path[-1] = probs.iloc[-1].idxmax(axis='columns')
+    for j in reversed(range(len(Y_obs)-1)):
+        viterbi_path[j] = (log(transition[viterbi_path[j+1]]) + probs.iloc[j]).idxmax(axis='columns')
+
+    return viterbi_path
+
+# %%
+
+# Use the convenientely provided out-of-bag probability predictions from the
+# random forest training. Question: Why is it preferable over 
+# Y_train_prob = clf.predict_proba(X_train)?
+Y_train_prob = clf.oob_decision_function_  # out-of-bag probability predictions
+prior, emission, transition = train_hmm(Y_train_prob, Y_train)  # obtain HMM matrices/params
+Y_test_pred_hmm = viterbi(Y_test_pred, prior, emission, transition)  # smoothing
+print('\nClassifier performance -- HMM smoothing')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_hmm)) 
+
+# Check again participant `006`
+mask = P_test=='006'
+plot_compare_activity(T_test[mask], 
+                      Y_test[mask],
+                      Y_test_pred_hmm[mask], 
+                      X_test.loc[mask, 'mean'])
+
+# %% [markdown]
+'''
+HMM further improves the performance overall, but classifying the rare class
+"vehicle" remains challenging.
+
 ## Is a simple logistic regression enough?
 
-*Note: this takes a few minutes*
+*Note: this may take a while*
 '''
 
 # %%
-classifier_LR = LogisticRegression(
-    random_state=42, solver='saga', multi_class='multinomial', max_iter=10000, n_jobs=1, verbose=True)
-classifier_LR.fit(X_train, y_train)
-y_test_LR = classifier_LR.predict(X_test)
-print("\n--- Logistic regression performance ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_LR))
+clf_LR = LogisticRegression(
+    max_iter=1000, 
+    multi_class='multinomial', 
+    random_state=42, 
+    verbose=1)
+scaler = StandardScaler()
+pipe = make_pipeline(scaler, clf_LR)
+pipe.fit(X_train, Y_train)
 
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_LR[pid_test==3], time_test[pid_test==3]
-)
-fig.show()
+Y_test_pred_LR = pipe.predict(X_test)
 
-# %%
-'''
-###### HMM smoothing on the logistic regression predictions
-'''
+# HMM smoothing
+Y_train_LR_prob = pipe.predict_proba(X_train)  # sorry! LR doesn't provide OOB estimates for free
+prior, emission, transition = train_hmm(Y_train_LR_prob, Y_train)
+Y_test_pred_LR_hmm = viterbi(Y_test_pred_LR, prior, emission, transition)  # smoothing
 
-# %%
-Y_train_LR_pred = classifier_LR.predict_proba(X_train)  # probabilistic predictions -- this is a (N,5) array
-prior, emission, transition = utils.train_hmm(Y_train_LR_pred, y_train)  # HMM training step
-y_test_LR_hmm = utils.viterbi(y_test_LR, prior, emission, transition)  # smoothing
-print("\n--- Logistic regression performance with HMM smoothing ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_LR_hmm))
+print('\nClassifier performance -- Logistic regression')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_LR_hmm)) 
 
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_LR_hmm[pid_test==3], time_test[pid_test==3]
-)
-fig.show()
+# Check again participant `006`
+mask = P_test=='006'
+plot_compare_activity(T_test[mask], 
+                      Y_test[mask],
+                      Y_test_pred_LR_hmm[mask], 
+                      X_test.loc[mask, 'mean'])
 
-# %%
-'''
-HMM on top of the logistic regression model substantially improves its
-performance. But although the predictions are smooth, the performance is
-still much worse than the random forest model.
+# %% [markdown]
 '''
 
-# %%
-'''
-## Conclusion
-
-Random forest on the hand-crafted features shows very good performance in detecting sleep and sedentary behavior, but the remaining activity classes could be improved.
-Smoothing the predictions to account for temporal dependencies reliably
-improves performance. A simple logistic regression did not seem to perform as
-well as the random forest (at least for the hyperparameters considered).
-
-In the next sections, we ask you to improve our baseline using a variety of
-approaches from the machine learning literature.
-Note that now that we have repeatedly evaluated on the test set and taken decisions
-based on it (we have abused the test set), the reported scores are no longer
-an unbiased estimate of the general performance. A true test set will be
-provided at the end of this workshop to truly assess the performance of your
-model.
-
-###### Ideas
-
-- Can we improve performance by balancing the dataset?
-- Tune hyperparameters of the random forest (`n_estimators`, `max_depth`,
-`criterion`, etc.). See [RandomForestClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html).
-- How would you select the best set of hyperparameters?
-
-###### References
-- [A nice lecture on validation](https://www.youtube.com/watch?v=o7zzaKd0Lkk&hd=1)
+The logistic regression model is consistently worse in all classes. While
+scores for the easy classes "sit-stand" and "sleep" remain high, the
+scores for the remaining classes are notably worse.
 
 '''
