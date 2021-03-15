@@ -88,6 +88,7 @@ values per window &mdash; a reduction of about 400 times.
 
 # %%
 
+# Take out 10 participants
 test_ids = ['002', '003', '004', '005', '006', 
             '007', '008', '009', '010', '011']
 mask_test = np.isin(P, test_ids)
@@ -225,10 +226,9 @@ dataset.
 
 # %%
 
-def train_hmm(Y_prob, Y_true, uninformative_prior=True):
+def train_hmm(Y_prob, Y_true, labels, uninformative_prior=True):
     ''' https://en.wikipedia.org/wiki/Hidden_Markov_model '''
 
-    labels = np.unique(Y_true)
     nlabels = len(labels)
 
     if uninformative_prior:  
@@ -293,7 +293,8 @@ def viterbi(Y_obs, hmm_params):
 # random forest training. Question: Why is it preferable over 
 # Y_train_prob = clf.predict_proba(X_train)?
 Y_train_prob = clf.oob_decision_function_  # out-of-bag probability predictions
-hmm_params = train_hmm(Y_train_prob, Y_train)  # obtain HMM matrices/params
+labels = clf.classes_
+hmm_params = train_hmm(Y_train_prob, Y_train, labels)  # obtain HMM matrices/params
 Y_test_pred_hmm = viterbi(Y_test_pred, hmm_params)  # smoothing
 print('\nClassifier performance -- HMM smoothing')
 print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred_hmm)) 
@@ -328,7 +329,8 @@ Y_test_pred_LR = pipe.predict(X_test)
 
 # HMM smoothing
 Y_train_LR_prob = pipe.predict_proba(X_train)  # sorry! LR doesn't provide OOB estimates for free
-hmm_params_LR = train_hmm(Y_train_LR_prob, Y_train)
+labels = pipe.classes_
+hmm_params_LR = train_hmm(Y_train_LR_prob, Y_train, labels)
 Y_test_pred_LR_hmm = viterbi(Y_test_pred_LR, hmm_params_LR)  # smoothing
 
 print('\nClassifier performance -- Logistic regression')
@@ -341,11 +343,3 @@ utils.plot_compare_activity(T_test[mask],
                       Y_test_pred_LR_hmm[mask], 
                       X_test.loc[mask, 'mean'])
 
-# %% [markdown]
-'''
-
-The logistic regression model performs notably worse.
-
-'''
-
-# %%
