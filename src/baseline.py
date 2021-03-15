@@ -229,8 +229,6 @@ dataset.
 def train_hmm(Y_prob, Y_true, labels, uninformative_prior=True):
     ''' https://en.wikipedia.org/wiki/Hidden_Markov_model '''
 
-    nlabels = len(labels)
-
     if uninformative_prior:  
         # All labels with equal probability
         prior = np.ones(len(labels)) / len(labels)
@@ -293,7 +291,7 @@ def viterbi(Y_obs, hmm_params):
 # random forest training. Question: Why is it preferable over 
 # Y_train_prob = clf.predict_proba(X_train)?
 Y_train_prob = clf.oob_decision_function_  # out-of-bag probability predictions
-labels = clf.classes_
+labels = clf.classes_  # need this to know the label order of cols of Y_train_prob
 hmm_params = train_hmm(Y_train_prob, Y_train, labels)  # obtain HMM matrices/params
 Y_test_pred_hmm = viterbi(Y_test_pred, hmm_params)  # smoothing
 print('\nClassifier performance -- HMM smoothing')
@@ -343,3 +341,10 @@ utils.plot_compare_activity(T_test[mask],
                       Y_test_pred_LR_hmm[mask], 
                       X_test.loc[mask, 'mean'])
 
+# %% [markdown]
+''' The model performs well on the easier classes "sleep" and "sit-stand",
+but is much worse on most of the remaining ones.
+'''
+
+
+# %%
