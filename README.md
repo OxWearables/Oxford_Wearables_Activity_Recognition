@@ -29,6 +29,11 @@ Or better, create a soft link:
 ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current location
 ```
 
+## Evaluation
+On the presentation day, show `metrics.classification_report` and `metrics.cohen_kappa` of your model under 10-fold cross-validation (CV). Remember to fold using the participant IDs.
+If you used 10-fold CV for hyperparameter tuning, you must use a different
+10-fold for reporting. Report the median and interquartile range for each metric, e.g. `.75 (.61, .82)`.
+
 ## How to run Jupyter notebooks remotely
 
 1. In your remote machine, launch a Jupyter notebook with a specified port, e.g. 9000:
