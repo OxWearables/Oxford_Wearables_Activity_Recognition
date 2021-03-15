@@ -262,9 +262,9 @@ def evaluate_model(cnn, X, Y):
 num_filters_init = 32  # initial num of filters -- see class definition
 in_channels = 3  # num channels of the signal -- equal to 3 for our raw triaxial timeseries
 output_size = num_labels  # number of classes (sleep, sedentary, etc...)
-num_epoch = 5  # num of epochs (full loops though the training set) for SGD training
-lr = 1e-3  # learning rate in SGD
-batch_size = 32  # size of the mini-batch in SGD
+num_epoch = 5  # num of epochs (full loops though the training set)
+lr = 1e-3  # learning rate
+batch_size = 32  # size of the mini-batch
 
 cnn = CNN(
     output_size=output_size,
