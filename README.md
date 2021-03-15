@@ -1,9 +1,10 @@
 # Oxford CDT/HDS Data Challenge: Activity recognition on the Capture24 dataset
 
 ## Setup instructions in the VMs
-1. Load and initialize Anaconda. This needs to be done only once &mdash; you may not need to run this if you can already see `(bash)` written in front of your prompt.
+1. Load and initialize Anaconda. This needs to be done only once (you may not need to run this if you already see `(bash)` written in front of your prompt).
+
    ```bash
-   module load Anaconda3/2019.07
+   module load Anaconda3
    conda init bash
    ```
    Exit and re-login so that the above takes effect.
@@ -19,7 +20,14 @@
 
 ## Datasets
 
-The bulk of the data required to run the notebooks can be found in `/cdtshared/HDS-M08/`. **Important:** Don't copy the data to own devices. Also, don't copy to your VM's `$HOME` as the data is quite large. Instead, change the absolute paths in the notebooks where needed.
+The data required to run the notebooks can be found in
+`/cdtshared/wearables/`. **Important:** Don't copy any data in there to own
+devices. Also, avoid copying the data to your VM's `$HOME`.
+Instead, change the absolute paths in the notebooks where necessary.
+Or better, create a soft link:
+```bash
+ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current location
+```
 
 ## How to run Jupyter notebooks remotely
 
