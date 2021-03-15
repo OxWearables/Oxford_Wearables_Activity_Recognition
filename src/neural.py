@@ -150,9 +150,6 @@ class CNN(nn.Module):
 '''
 ## Helper functions
 
-- A data loader to provide the mini-batches during training.
-- A function to forward-pass the model on a dataset by chunks &mdash; this is simply to prevent the memory from blowing up.
-- A function to evaluate the model to track performance during training.
 '''
 
 # %%
@@ -278,6 +275,7 @@ ax.set_xlabel('epoch')
 ax = ax.twinx()
 ax.plot(kappa_history, color='C2', label='kappa')
 ax.set_ylabel('kappa')
+ax.grid(True)
 fig.legend()
 fig.show()
 
