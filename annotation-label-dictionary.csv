@@ -1,0 +1,166 @@
+annotation,label:Willetts2018,label:Doherty2018,label:Walmsley2020
+7030 sleeping;MET 0.95,sleep,sleep,sleep
+occupation;office and administrative support;11580 office/computer work general;MET 1.5,sit-stand,sedentary,sedentary
+home activity;household chores;preparing meals/cooking/washing dishes;5035 kitchen activity general cooking/washing/dishes/cleaning up;MET 3.3,mixed,moderate,light
+occupation;office and administrative support;11580 office wok/computer work general;MET 1.5,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;9060 sitting/lying reading or without observable/identifiable activities;MET 1.3,sit-stand,sedentary,sedentary
+home activity;miscellaneous;walking;17150 walking household without observable loads;MET 2.0,walking,walking,light
+transportation;private transportation;16010 driving automobile or light truck (not a semi);MET 2.5,vehicle,sedentary,sedentary
+home activity;miscellaneous;sitting;7010 sitting/lying and watching television with TV on as the primary activity;MET 1.0,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;11580 office/computer work general;MET 1.5,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;9055 sitting/lying talking in person/using a mobile phone/smartphone/tablet or talking on the phone/computer (skype chatting);MET 1.5,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;11580 office work such as writing and typing (with or without eating at the same time);MET 1.5,sit-stand,sedentary,sedentary
+home activity;miscellaneous;walking;5165 (generic) walking non-cleaning task such as closing windows lock door putting away items;MET 3.5,walking,walking,light
+home activity;eating;13030 eating sitting alone or with someone;MET 1.5,sit-stand,sedentary,sedentary
+leisure;miscellaneous;walking;21070 (generic) walking and occasional standing (no more than two consecutive images);MET 2.5,walking,walking,light
+transportation;walking;17161 walking not as the single means of transports e.g.from house to transports or vice versa/from car to places or vice versa/between transports;MET 2.5,walking,walking,light
+home activity;miscellaneous;sitting;9030 sitting desk entertainment/hobby (with or without eating at the same time);MET 1.3,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;5080 sitting non-desk work (with or without eating at the same time);MET 1.3,sit-stand,sedentary,sedentary
+occupation;interruption;sitting;11585 sitting meeting/talking to colleagues with or without eating;MET 1.5,sit-stand,sedentary,sedentary
+transportation;private transportation;1010 bicycling;MET 4.0,bicycling,moderate,moderate-vigorous
+leisure;miscellaneous;sitting;9060 (generic) sitting/lying reading or without observable/identifiable activities;MET 1.3,sit-stand,sedentary,sedentary
+leisure;miscellaneous;walking;5060 shopping miscellaneous;MET 2.3,mixed,walking,light
+occupation;interruption;11585 sitting meeting/talking to colleages with or without eating;MET 1.5,sit-stand,sedentary,sedentary
+home activity;leisure;activities for maintenance of a household;miscellaneous;9100 retreat/family reunion activities involving sitting eating relaxing talking with more than one person;MET 1.8,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;9060 sitting/lying reading or without observable activities;MET 1.3,sit-stand,sedentary,sedentary
+occupation;interruption;11791 walking on job in office or lab area;MET 2.0,walking,walking,light
+leisure;eating;social;13030 eating sitting indoor/outdoor;MET 1.5,sit-stand,sedentary,sedentary
+home activity;leisure;activties for maintenance of a household;miscellaneous;9100 retreat/family reunion activities involving sitting eating relaxing talking with more than one person;MET 1.8,sit-stand,sedentary,sedentary
+sitting;sitstand+activity;social;MET 1.8,sit-stand,sedentary,sedentary
+home activity;miscellaneous;sitting;9030  sitting desk work (with or without eating at the same time);MET 1.3,sit-stand,sedentary,sedentary
+home activity;miscellaneous;standing;9050 standing talking in person/on the phone/computer (skype chatting) or using a mobile phone/smartphone/tablet;MET 1.8,sit-stand,tasks-light,light
+occupation;interruption;sitting;9060 sitting without observable/identifiable activities;MET 1.3,sit-stand,sedentary,sedentary
+walking;social;MET 3.0,walking,walking,moderate-vigorous
+home activity;household chores;washing/ironing/mending clothes;5090 folding or hanging clothes/put clothes in or out of washer or dryer/packing suitcase limited walking;MET 2.0,mixed,tasks-light,light
+home activity;miscellaneous;standing;9070 standing reading or without observable/identifiable activities;MET 1.8,sit-stand,tasks-light,light
+occupation;interruption;walking;11791 walking on job in office or lab area;MET 2.0,walking,walking,light
+household-chores;sitstand+activity;MET 2.5,mixed,tasks-light,light
+leisure;miscellaneous;sitting;9055 sitting talking to person/using the phone;MET 1.5,sit-stand,sedentary,sedentary
+transportation;private transportation;16015 riding in a car or truck;MET 1.3,vehicle,sedentary,sedentary
+home activity;self care;13040 (generic) self care such as grooming/washing hands/shaving/brushing teeth/putting on make-up not eliminating and bathing (not necessary in the toilet);MET 2.0,mixed,tasks-light,light
+mixed-activity;sitstand+activity;MET 3.0,mixed,tasks-light,light
+walking;MET 4.0,walking,walking,moderate-vigorous
+leisure;eating;13030 eating sitting indoor/outdoor;MET 1.5,sit-stand,sedentary,sedentary
+leisure;miscellaneous;5060 shopping miscellaneous;MET 2.3,mixed,walking,light
+home activity;household chores;washing/ironing/mending clothes;5070 ironing;MET 1.8,mixed,tasks-light,light
+leisure;miscellaneous;standing;9050 standing talking in person/using a phone/smartphone/tablet;MET 1.8,sit-stand,tasks-light,light
+home activity;miscellaneous;walking;5147 walking moving away light items (pens/papers/keys not included);MET 3.0,walking,walking,light
+leisure;miscellaneous;walking;17031 loading /unloading a car implied walking;MET 3.5,mixed,walking,moderate-vigorous
+manual-work;sitstand+activity;MET 2.8,mixed,tasks-light,light
+occupation;interruption;13030 eating sitting;MET 1.5,sit-stand,sedentary,sedentary
+walking;walking+activity;social;MET 3.0,walking,walking,moderate-vigorous
+occupation;interruption;standing;9050 standing talking in person/using a phone/smartphone/tablet;MET 1.8,sit-stand,tasks-light,light
+sitting;sitstand+lowactivity;screen;MET 1.0,sit-stand,sedentary,sedentary
+household-chores;walking+activity;MET 3.0,mixed,tasks-light,light
+home activity;household chores;grocery shopping;5060 shopping;MET 2.3,mixed,walking,light
+home activity;miscellaneous;sitting;9030 sitting desk work (with or without eating at the same time);MET 1.3,sit-stand,sedentary,sedentary
+manual-work;sitstand+activity;MET 5.0,mixed,moderate,moderate-vigorous
+occupation;interruption;sitting;13030 eating sitting;MET 1.5,sit-stand,sedentary,sedentary
+sitting;sitstand+activity;MET 1.8,sit-stand,tasks-light,sedentary
+leisure;miscellaneous;standing;9070 standing reading or without observable/identifiable activities;MET 1.8,sit-stand,tasks-light,light
+transportation;waiting;7040 standing in a line;MET 1.3,sit-stand,tasks-light,light
+home activity;child/elderly/pet care;child care;5185 child care sitting/kneeling occasional lifting;MET 2.0,mixed,tasks-light,light
+home activity;miscellaneous;standing;9071 (generic) standing miscellaneous;MET 2.5,sit-stand,tasks-light,light
+leisure;miscellaneous;standing;9071 (generic) standing miscellaneous;MET 2.5,sit-stand,tasks-light,light
+occupation;interruption;standing;9070 standing reading or without observable/identifiable activities;MET 1.8,sit-stand,tasks-light,light
+household-chores;sitstand+lowactivity;MET 1.3,mixed,sedentary,sedentary
+home activity;miscellaneous;standing;9020 standing writing/drawing/painting;MET 1.8,sit-stand,tasks-light,light
+mixed-activity;sitstand+activity;MET 2.0,mixed,tasks-light,light
+occupation;interruption;sitting;9055 sitting using a mobile phone/smartphone/tablet or talking on the phone/computer (skype meeting etc.);MET 1.5,sit-stand,sedentary,sedentary
+occupation;interruption;5041 kitchen activity in the working place;MET 1.8,mixed,tasks-light,light
+manual-work;walking+activity;MET 3.5,mixed,moderate,moderate-vigorous
+occupation;interruption;9050 standing talking in persone/using a phone/smartphone/tablet;MET 1.8,sit-stand,tasks-light,light
+mixed-activity;sitstand+activity;MET 2.5,mixed,tasks-light,light
+sitting;sitstand+lowactivity;social;MET 1.5,sit-stand,sedentary,sedentary
+walking;walking+activity;MET 3.5,walking,walking,moderate-vigorous
+sports/gym;MET 3.5,mixed,moderate,moderate-vigorous
+home activity;miscellaneous;5025 (generic) multiple household tasks all at once including standing/lifting/sitting;MET 2.8,mixed,tasks-light,light
+home activity;miscellaneous;standing;9070 standing reading or without obvious activities;MET 1.8,sit-stand,tasks-light,light
+home activity;household chores;washing/ironing/mending clothes;5095 putting away /gathering clothes involving walking;MET 2.3,walking,tasks-light,light
+manual-work;sitstand+activity;MET 2.0,mixed,tasks-light,light
+occupation;interruption;standing;9071 (generic) standing miscellaneous;MET 2.5,sit-stand,tasks-light,light
+leisure;miscellaneous;sitting;21005 (generic) sitting light office writing typing work;MET 1.5,sit-stand,sedentary,sedentary
+transportation;walking;9050 standing miscellaneous (talking to others etc.);MET 1.8,sit-stand,tasks-light,light
+sports/gym;MET 8.0,mixed,moderate,moderate-vigorous
+sports/gym;MET 2.5,mixed,moderate,moderate-vigorous
+sitting;sitstand+lowactivity;MET 1.5,sit-stand,sedentary,sedentary
+sitting;screen;MET 1.0,sit-stand,sedentary,sedentary
+sitting;sitstand+lowactivity;MET 1.3,sit-stand,sedentary,sedentary
+occupation;interruption;miscellaneous;5041 kitchen activity in the working place;MET 1.8,mixed,tasks-light,light
+home activity;household chores;house cleaning;miscellaneous;5100 making bed/changing linens;MET 3.3,mixed,moderate,light
+home activity;miscellaneous;standing;5146 standing packing/unpacking household items occasional lifting;MET 3.5,mixed,moderate,moderate-vigorous
+transportation;waiting;7021 sitting;MET 1.3,sit-stand,sedentary,sedentary
+manual-work;walking+activity;MET 3.8,mixed,moderate,moderate-vigorous
+standing;sitstand+lowactivity;MET 1.5,sit-stand,tasks-light,light
+household-chores;sitstand+activity;MET 2.3,mixed,tasks-light,light
+sports/gym;MET 6.0,mixed,moderate,moderate-vigorous
+manual-work;sitstand+activity;MET 5.5,mixed,moderate,moderate-vigorous
+mixed-activity;walking;MET 5.0,mixed,walking,moderate-vigorous
+home activity;eating;13035 eating standing alone or with others;MET 2.0,sit-stand,tasks-light,light
+manual-work;walking+activity;MET 3.0,mixed,tasks-light,light
+sports/gym;MET 5.0,mixed,moderate,moderate-vigorous
+standing;sitstand+activity;MET 3.0,sit-stand,tasks-light,light
+sports/gym;MET 5.5,mixed,moderate,moderate-vigorous
+sitting;sitstand+lowactivity;screen;MET 1.5,sit-stand,sedentary,sedentary
+standing;sitstand+activity;screen;MET 1.8,sit-stand,tasks-light,light
+manual-work;walking+activity;MET 5.5,mixed,moderate,moderate-vigorous
+household-chores;walking+activity;MET 3.3,mixed,moderate,light
+sitting;MET 1.3,sit-stand,sedentary,sedentary
+sports/gym;MET 3.0,mixed,moderate,light
+sitting;sitstand+activity;social;MET 2.3,sit-stand,tasks-light,sedentary
+home activity;self care;13020 dressing/undressing;MET 2.5,mixed,tasks-light,light
+household-chores;sitstand+activity;social;MET 4.5,mixed,moderate,moderate-vigorous
+standing;sitstand+activity;MET 1.8,sit-stand,tasks-light,light
+mixed-activity;sitstand+activity;social;MET 3.0,mixed,tasks-light,light
+manual-work;sitstand+activity;MET 3.0,mixed,tasks-light,light
+mixed-activity;sitstand+activity;MET 4.5,mixed,moderate,moderate-vigorous
+household-chores;sitstand+activity;social;MET 2.3,mixed,tasks-light,light
+standing;sitstand+activity;eating;MET 2.0,sit-stand,tasks-light,light
+mixed-activity;sitstand+activity;social;MET 2.8,mixed,tasks-light,light
+mixed-activity;walking+activity;MET 3.5,mixed,walking,moderate-vigorous
+sitting;sitstand+activity;social;MET 2.0,sit-stand,tasks-light,sedentary
+sports/gym;MET 8.5,mixed,moderate,moderate-vigorous
+sitting;sitstand+lowactivity;MET 2.5,sit-stand,sedentary,sedentary
+mixed-activity;walking+activity;social;MET 3.0,mixed,walking,moderate-vigorous
+occupation;interruption;miscellaneous;13009 toilet break;MET 1.8,mixed,tasks-light,light
+household-chores;walking+activity;MET 2.5,mixed,tasks-light,light
+home activity;lawn and garden;gardening service;8192 shoveling dirt or mud;MET 5.5,mixed,moderate,moderate-vigorous
+sitting;sitstand+activity;eating;MET 1.5,sit-stand,sedentary,sedentary
+household-chores;walking+activity;MET 2.0,mixed,moderate,light
+household-chores;sitstand+activity;MET 3.5,mixed,moderate,moderate-vigorous
+home activity;household chores;preparing meals/cooking/washing dishes;5035 cleaning up table after meal implied walking (e.g. leaving from eating table to the kitchen);MET 3.3,mixed,moderate,light
+home activity;household chores;preparing meals/cooking/washing dishes;5051 serving food/setting table implied walking and standing;MET 2.5,walking,tasks-light,light
+standing;sitstand+activity;social;MET 2.5,sit-stand,tasks-light,light
+mixed-activity;walking+activity;MET 2.3,mixed,tasks-light,light
+mixed-activity;walking+activity;MET 3.0,mixed,walking,light
+home activity;self care;13009 toilet eliminating or squatting;MET 1.8,mixed,tasks-light,light
+standing;sitstand+activity;MET 2.5,sit-stand,tasks-light,light
+manual-work;sitstand+activity;MET 1.5,mixed,tasks-light,light
+mixed-activity;sitstand+activity;MET 1.8,mixed,tasks-light,light
+sports/gym;MET 7.0,mixed,moderate,moderate-vigorous
+mixed-activity;social;MET 3.5,mixed,moderate,moderate-vigorous
+sports/gym;MET 5.3,mixed,moderate,moderate-vigorous
+mixed-activity;sitstand+activity;social;MET 2.0,mixed,tasks-light,light
+mixed-activity;sitstand+activity;MET 3.5,mixed,moderate,moderate-vigorous
+vehicle;MET 2.8,vehicle,tasks-light,sedentary
+mixed-activity;walking+activity;social;MET 2.0,mixed,tasks-light,light
+household-chores;walking+activity;social;MET 2.5,mixed,tasks-light,light
+mixed-activity;MET 4.5,mixed,moderate,moderate-vigorous
+sports/gym;MET 2.8,mixed,moderate,light
+standing;walking+activity;MET 2.3,sit-stand,tasks-light,light
+sports/gym;MET 9.0,mixed,moderate,moderate-vigorous
+household-chores;sitstand+activity;MET 4.0,mixed,moderate,moderate-vigorous
+standing;sitstand+activity;MET 2.0,sit-stand,tasks-light,light
+home activity;household chores;washing/ironing/mending clothes;5080 knitting sewing wrapping presents sitting;MET 1.3,mixed,sedentary,sedentary
+sitting;sitstand+lowactivity;screen;MET 1.3,sit-stand,sedentary,sedentary
+manual-work;walking+activity;MET 4.0,mixed,moderate,moderate-vigorous
+walking;MET 3.5,mixed,walking,moderate-vigorous
+standing;sitstand+activity;social;MET 1.8,sit-stand,tasks-light,light
+sitting;social;MET 2.5,sit-stand,tasks-light,sedentary
+manual-work;MET 8.0,mixed,moderate,moderate-vigorous
+home activity;miscellaneous;walking;5121 walking with moving and lifting loads such as bikes and furniture;MET 4.0,walking,walking,moderate-vigorous
+transportation;walking;17250 walking as the single means to a destination not to work or class;MET 3.0,mixed,walking,moderate-vigorous
+transportation;walking;17270 walking as the single means to work or class (not from);MET 3.5,walking,walking,moderate-vigorous
+transportation;public transportation;16016 riding in a bus or train;MET 1.3,vehicle,sedentary,sedentary
+household-chores;sitstand+lowactivity;MET 2.8,mixed,tasks-light,light
+vehicle;MET 1.3,vehicle,sedentary,sedentary
