@@ -200,12 +200,7 @@ def evaluate_model(cnn, X, Y):
     return {'loss':loss, 'kappa':kappa, 'Y_pred':Y_pred}
 
 # %% [markdown]
-'''
-## Hyperparameters, model instantiation, loss function and optimizer
-
-Set the hyperparameters, instantiate the model, define the loss
-function (cross entropy for classification) and optimizer.
-'''
+''' ## Hyperparameters, model instantiation, loss function and optimizer '''
 
 # %%
 num_filters_init = 8  # initial num of filters -- see class definition
