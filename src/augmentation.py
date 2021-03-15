@@ -109,6 +109,8 @@ Let's generate an artificial test set simulating this scenario by flipping
 two of the axes signs (it does not exactly simulate a rotation since the
 movement dynamics are also mirrored, but it is enough for our demonstration
 purposes).
+
+*Note: this may take a while*
 '''
 
 # %%
@@ -132,8 +134,6 @@ X_rot_test = pd.DataFrame(X_rot_test)
 
 # %%
 
-X_rot_test = pd.DataFrame(X_rot_test)
-
 Y_rot_test_pred = clf.predict(X_rot_test)
 print('\nClassifier performance -- simulated test set')
 print('Out of sample:\n', metrics.classification_report(Y_test, Y_rot_test_pred, zero_division=0)) 
@@ -148,6 +148,7 @@ worn.
 
 ## Data augmentation
 
+*Note: this may take a while*
 '''
 
 # %%
