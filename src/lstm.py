@@ -1,42 +1,41 @@
-# %%
+# %% [markdown]
 '''
-# Activity recognition on the Capture24 dataset
+# Long short-term memory
 
-## Long short-term memory
+We saw that accounting for the temporal dependency helps to improve performance.
+We found improvements with a hidden Markov model, but also using a simple
+mode smoothing.
+Here we look at using a more flexible model &mdash; the Long short-term
+memory (LSTM) &mdash; to model the temporal dependency and smooth the predictions of
+a random forest.
 
-*This section assumes familiarity with [PyTorch](https://pytorch.org/)*
-
-We have seen the importance of accounting for temporal dependencies in
-the data to improve the classification performance. We have done so by using a
-Hidden Markov Model to smooth the predictions of a random forest. Here we
-look at using a more flexible model &mdash; the Long short-term memory (LSTM) &mdash;
-to model the temporal dependencies to smooth the predictions of the random
-forest.
-
-###### Setup
+## Setup
 '''
 
 # %%
+import os
+import json
 import numpy as np
+import pandas as pd
+from imblearn.ensemble import BalancedRandomForestClassifier
+from sklearn import metrics
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
+from tqdm.auto import tqdm
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-from tqdm.auto import tqdm
-import utils
+
+import utils  # helper functions -- check out utils.py
 
 # For reproducibility
 np.random.seed(42)
 torch.manual_seed(42)
 cudnn.benchmark = True
 
-# %%
-''' ###### Grab a GPU if there is one '''
-
-# %%
+# Grab a GPU if there is one
 if torch.cuda.is_available():
     device = torch.device("cuda")
     print("Using {} device: {}".format(device, torch.cuda.current_device()))
@@ -45,57 +44,87 @@ else:
     print("Using {}".format(device))
 
 # %%
-''' ###### Load dataset and hold out some instances for testing '''
+
+DATASET_PATH = 'dataset/'  # path to your extracted windows
+X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features
+print(f'Content of {DATASET_PATH}')
+print(os.listdir(DATASET_PATH))
+
+with open(DATASET_PATH+'info.json', 'r') as f:
+    info = json.load(f)  # load metadata
+
+Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
+T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
+P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+X_feats = pd.read_pickle('X_feats.pkl')
+
+labels = np.unique(Y)
+num_labels = len(labels)
+
+Y = np.where(Y.reshape(-1,1)==labels)[1]  # to numeric
+
+print('Y shape:', Y.shape)
+print('T shape:', T.shape)
+print('P shape:', P.shape)
+print('X_feats shape:', X_feats.shape)
+
+# %% [markdown]
+'''
+## Train/test split
+'''
 
 # %%
-data = np.load('capture24.npz', allow_pickle=True)
-# data = np.load('capture24_small.npz', allow_pickle=True)
-print("Contents of capture24.npz:", data.files)
-X, y, pid, time = data['X_feats'], data['y'], data['pid'], data['time']
 
-# Hold out some participants for testing the model
-pids_test = [2, 3]  # participants 2 & 3
-mask_test = np.isin(pid, pids_test)
+# Take out 10 participants
+test_ids = ['002', '003', '004', '005', '006', 
+            '007', '008', '009', '010', '011']
+mask_test = np.isin(P, test_ids)
 mask_train = ~mask_test
-X_train, y_train, pid_train, time_train = \
-    X[mask_train], y[mask_train], pid[mask_train], time[mask_train]
-X_test, y_test, pid_test, time_test = \
-    X[mask_test], y[mask_test], pid[mask_test], time[mask_test]
+X_train, Y_train, P_train, T_train = \
+    X_feats[mask_train], Y[mask_train], P[mask_train], T[mask_train]
+X_test, Y_test, P_test, T_test = \
+    X_feats[mask_test], Y[mask_test], P[mask_test], T[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
-# %%
-''' ###### Train random forest classifier '''
+# %% [markdown]
+''' 
+## Train a random forest classifier
 
-# %%
-random_forest = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
-random_forest.fit(X_train, y_train)
-# Grab out-of-bag probability estimations -- this will be the input to the LSTM
-Y_train = random_forest.oob_decision_function_.astype('float32')
-# This will be the test set inputs to the LSTM
-Y_test = random_forest.predict_proba(X_test).astype('float32')
-
-# %%
+*Note: this may take a while*
 '''
-## Smoothing the predictions with a LSTM
-In the Hidden Markov Model, smoothing of the current prediction is based on
-the current and past prediction of the random forest. Here we use a LSTM
-to do the smoothing as a sequence-to-sequence prediction task: the neural
-network takes a sequence of random forest predictions and outputs the
-sequence of smoothed predictions.
 
-###### Architecture design
-Our baseline is a single-layer bidirectional LSTM.
-The input to the network is a `(seq_length,N,5)` array corresponding to `N`
-sequences of `seq_length` consecutive random forest probabilistic
-predictions.
-The output of the network is a `(seq_length,N,5)` array corresponding to
-the smoothed predictions, represented as *unnormalized scores*.
-To obtain probabilities, we can pass each row of the last axis to a softmax.
-Then to report a class label, we can pick the highest probability in each
-row. We output class scores instead of class probabilities or labels because
-the loss function that we will use operates on the scores
-[(torch.CrossEntropyLoss)](https://pytorch.org/docs/stable/nn.html#crossentropyloss).
+# %%
+clf = BalancedRandomForestClassifier(
+    n_estimators=2000,
+    replacement=True,
+    sampling_strategy='not minority',
+    oob_score=True,
+    n_jobs=4,
+    random_state=42,
+    verbose=1
+)
+clf.fit(X_train, Y_train)
+
+Y_test_pred = clf.predict(X_test)
+print('\nClassifier performance')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0)) 
+
+# This will be the training set
+Y_in_train = clf.oob_decision_function_.astype('float32')
+# This will be the test set
+Y_in_test = clf.predict_proba(X_test).astype('float32')
+
+# %% [markdown]
+'''
+
+## Architecture design
+As a baseline, let's use a single-layer bidirectional LSTM.
+PyTorch uses a sligtly unintuitive array format for the input and output of
+its LSTM module.
+The input and output shape is `(seq_length,N,num_labels)`, corresponding to 
+`N` sequences of `seq_length` elements of size `num_labels`. 
+Here, each element is a vector of label probabilities/logits.
 '''
 
 # %%
@@ -118,16 +147,9 @@ class LSTM(nn.Module):
         )
         return output
 
-# %%
+# %% [markdown]
 '''
-###### Helper functions
-
-We need a few helper functions:
-- A data loader that will provide the mini-batches during training.
-- A helper function that forward-passes the model on a dataset by chunks
-&mdash; this is simply to prevent the memory from blowing up.
-- A function that evaluates the model (RF + LSTM) on a dataset, to be used to
-track the performance during training.
+## Helper functions
 '''
 
 # %%
@@ -196,30 +218,26 @@ def forward_by_batches(lstm, Y_in, seq_length):
     return Y_out
 
 
-def evaluate_model(random_forest, lstm, seq_length, Y, y, pid=None):
-    Y_lstm = forward_by_batches(lstm, Y, seq_length)  # lstm smoothing (scores)
-    loss = F.cross_entropy(Y_lstm, torch.from_numpy(y).to(device)).item()
-    Y_lstm = F.softmax(Y_lstm, dim=-1)  # convert to probabilities
-    y_lstm = torch.argmax(Y_lstm, dim=-1)  # convert to classes
-    y_lstm = y_lstm.cpu().numpy()  # cast to numpy array
-    scores = utils.compute_scores(y, y_lstm)
-    return loss, scores
+def evaluate_model(lstm, Y_in, Y, seq_length):
+    Y_pred_prob = forward_by_batches(lstm, Y_in, seq_length)  # lstm smoothing (scores)
+    loss = F.cross_entropy(Y_pred_prob, torch.from_numpy(Y).to(device)).item()
+
+    Y_pred_prob = F.softmax(Y_pred_prob, dim=-1)  # convert to probabilities
+    Y_pred = torch.argmax(Y_pred_prob, dim=-1)  # convert to classes
+    Y_pred = Y_pred.cpu().numpy()  # cast to numpy array
+    kappa = metrics.cohen_kappa_score(Y, Y_pred)
+
+    return {'loss':loss, 'kappa':kappa, 'Y_pred':Y_pred}
+
+# %% [markdown]
+''' ## Hyperparameters, model instantiation, loss function and optimizer '''
 
 # %%
-'''
-###### Hyperparameters, model instantiation, loss function and optimizer
-
-Now we set the hyperparameters, instantiate the model, define the loss
-function (we use cross entropy for multiclass classification) and optimizer
-(we use AMSGRAD &mdash; a variant of SGD).
-'''
-
-# %%
-hidden_size = 1024  # size of LSTM's hidden state
-input_size = output_size = 5  # number of classes (sleep, sedentary, etc...)
-seq_length = 5  # sequence length
-num_epoch = 20  # num of epochs (full loops though the training set) for SGD training
-lr = 1e-3  # learning rate in SGD
+hidden_size = 128  # size of LSTM's hidden state
+input_size = output_size = num_labels
+seq_length = 5
+num_epoch = 4
+lr = 1e-4
 batch_size = 32  # size of the mini-batch in SGD
 
 lstm = LSTM(
@@ -232,22 +250,15 @@ print(lstm)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(lstm.parameters(), lr=lr, amsgrad=True)
 
-# %%
-'''
-###### Training
-
-Training via mini-batch gradient descent begins here. We loop through the
-training set `num_epoch` times with the `dataloader` iterator.
-'''
+# %% [markdown]
+''' ## Training '''
 
 # %%
-accuracy_history = []
-balanced_accuracy_history = []
 kappa_history = []
 loss_history = []
 loss_history_train = []
 for i in tqdm(range(num_epoch)):
-    dataloader = create_dataloader(Y_train, y_train, seq_length, batch_size, shuffle=True)
+    dataloader = create_dataloader(Y_in_train, Y_train, seq_length, batch_size, shuffle=True)
     losses = []
     for sequence, target in dataloader:
         sequence, target = sequence.to(device), target.to(device)
@@ -260,56 +271,38 @@ for i in tqdm(range(num_epoch)):
         # Logging -- track train loss
         losses.append(loss.item())
 
-    # -------------------------------------------------------------------------
-    # Evaluate performance at the end of each epoch (full loop through the
-    # training set). We could also do this at every iteration, but this would
-    # be very expensive since we are evaluating on a large dataset.
-    # -------------------------------------------------------------------------
+    # --------------------------------------------------------
+    #       Evaluate performance at the end of each epoch 
+    # --------------------------------------------------------
 
     # Logging -- average train loss in this epoch
     loss_history_train.append(np.mean(losses))
 
     # Logging -- evaluate performance on test set
-    loss_test, scores_test = evaluate_model(
-        random_forest, lstm, seq_length, Y_test, y_test, pid_test)
-    loss_history.append(loss_test)
-    accuracy_history.append(scores_test['accuracy'])
-    balanced_accuracy_history.append(scores_test['balanced_accuracy'])
-    kappa_history.append(scores_test['kappa'])
+    results = evaluate_model(lstm, Y_in_test, Y_test, seq_length) 
+    loss_history.append(results['loss'])
+    kappa_history.append(results['kappa'])
 
-# %%
-''' ###### Plot score and loss history '''
+# %% [markdown]
+''' ## Model performane '''
 
 # %%
 # Loss history
+plt.close('all')
 fig, ax = plt.subplots()
 ax.plot(loss_history_train, color='C0', label='train')
 ax.plot(loss_history, color='C1', label='test')
-ax.set_ylabel('loss')
+ax.set_ylabel('loss (CE)')
 ax.set_xlabel('epoch')
-ax.legend()
+ax = ax.twinx()
+ax.plot(kappa_history, color='C2', label='kappa')
+ax.set_ylabel('kappa')
+ax.grid(True)
+fig.legend()
 fig.show()
 
-# Scores history
-fig, ax = plt.subplots()
-ax.plot(accuracy_history, label='accuracy')
-ax.plot(balanced_accuracy_history, label='balanced accuracy')
-ax.plot(kappa_history, label='kappa')
-ax.set_ylabel('score')
-ax.set_xlabel('epoch')
-ax.legend()
-fig.show()
-
-# Scores details -- last epoch
-utils.print_scores(scores_test)
-
-# %%
-'''
-###### Ideas
-- Implement early stopping to select the model at its best out-of-sample performance. Do we track kappa or accuracy?
-- Tune size and number of layers of the LSTM. See [module doc](https://pytorch.org/docs/stable/nn.html#lstm).
-
-###### References
-- [Sequence models and LSTM in PyTorch](https://pytorch.org/tutorials/beginner/nlp/sequence_models_tutorial.html)
-- [A recipe for training neural networks](http://karpathy.github.io/2019/04/25/recipe/)
-'''
+# Report
+Y_test_pred_lab = labels[results['Y_pred']]  # to labels
+Y_test_lab = labels[Y_test]  # to labels
+print('\nClassifier performance')
+print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab)) 
