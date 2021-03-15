@@ -122,7 +122,7 @@ Y_in_test = clf.predict_proba(X_test).astype('float32')
 As a baseline, let's use a single-layer bidirectional LSTM.
 PyTorch uses a sligtly unintuitive array format for the input and output of
 its LSTM module.
-The input and output shape is `(seq_length,N,num_labels)`, corresponding to 
+The array shape for both input and output is `(seq_length,N,num_labels)`, corresponding to 
 `N` sequences of `seq_length` elements of size `num_labels`. 
 Here, each element is a vector of label probabilities/logits.
 '''
@@ -156,9 +156,12 @@ class LSTM(nn.Module):
 def create_dataloader(Y, y=None, seq_length=5, batch_size=1, shuffle=False, eval_mode=False):
     ''' Create a (batch) iterator over the dataset. It yields (batches of)
     sequences of consecutive rows of `Y` and `y` of length `seq_length` (can
-    be less than `seq_length` in `eval_mode=True`). This iterator can also be
-    implemented with PyTorch's Dataset and DataLoader classes -- See
-    https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
+    be less than `seq_length` in `eval_mode=True`). 
+    
+    The below code looks complicated but all it's trying to do is to pack
+    sequences of equal length where applicable, else provide the sequences
+    one by one.
+    '''
     if eval_mode:
         # In order to reuse this loader in evaluation/prediction mode, we
         # provide non-overlapping segments, as well as the trailing segments
@@ -199,8 +202,8 @@ def create_dataloader(Y, y=None, seq_length=5, batch_size=1, shuffle=False, eval
 
 
 def forward_by_batches(lstm, Y_in, seq_length):
-    ''' Forward pass model on a dataset. Do this by batches so that we do
-    not blow up the memory. '''
+    ''' Forward pass model on a dataset. 
+    Do this by batches so that we don't blow up the memory. '''
     Y_out = []
     lstm.eval()
     with torch.no_grad():
@@ -235,10 +238,10 @@ def evaluate_model(lstm, Y_in, Y, seq_length):
 # %%
 hidden_size = 128  # size of LSTM's hidden state
 input_size = output_size = num_labels
-seq_length = 5
-num_epoch = 4
-lr = 1e-4
-batch_size = 32  # size of the mini-batch in SGD
+seq_length = 5  # max num of elems to consider for smoothing (temporal horizon)
+num_epoch = 5  # num of epochs (full loops though the training set)
+lr = 1e-3  # learning rate
+batch_size = 32  # size of the mini-batch
 
 lstm = LSTM(
     input_size=input_size,
@@ -306,3 +309,8 @@ Y_test_pred_lab = labels[results['Y_pred']]  # to labels
 Y_test_lab = labels[Y_test]  # to labels
 print('\nClassifier performance')
 print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab)) 
+
+# %% [markdown]
+''' Oops! The model seems to overfit very quickly. '''
+
+# %%
