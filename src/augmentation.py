@@ -1,211 +1,193 @@
-# %%
+# %% [markdown] 
 '''
-# Activity recognition on the Capture24 dataset
-
-## Data augmentation
+# Data augmentation
 
 Data augmentation is a straighforward way to artificially increase the size
-of the dataset, which can be useful when the dataset is small or when
-using large models such as deep neural networks. It relies on generating
-variations of each instance in the dataset by applying several transformations on it.
+of the dataset by applying transformations to the data. It is very useful
+when the dataset is small, or to reduce overfitting in large models.
+But not all transformations are applicable. For example, for image
+recognition it may not matter if the image is rotated, flipped or stretched.
+On the other hand, flipping and rotating may not be a good idea for
+handwriting recognition (e.g. a "p" gets turned into a "q" or "b", a "6" into
+a "9"). The key is to find *invariances* of the *learning task*.
 
-Not any transformation is applicable: For example, for image recognition it may not matter if the image is rotated, flipped or stretched; but for digits and letters recognition, flipping the image may not be helpful.
-The key is to find *invariances* in the data that are applicable for our learning task.
-
-###### Setup
+## Setup
 '''
-
 # %%
+import os
+import json
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+from imblearn.ensemble import BalancedRandomForestClassifier
+from sklearn import metrics
 from tqdm.auto import tqdm
-import utils  # contains helper functions for this workshop -- check utils.py
+import utils  # helper functions -- check out utils.py
 
 # For reproducibility
 np.random.seed(42)
 
-# %%
-''' ###### Load dataset and hold out some instances for testing
-
-To highlight the utility of data augmentation in small datasets, let us constrain ourselves to only *five* participants:
+# %% [markdown]
+''' 
+## Load dataset 
 '''
 
 # %%
-data = np.load('capture24.npz', allow_pickle=True)
-# data = np.load('capture24_small.npz', allow_pickle=True)
-mask = np.isin(data['pid'], [1, 2, 3, 4, 5])  # take only five participants
-X_feats, y, pid, time = \
-    data['X_feats'][mask], data['y'][mask], data['pid'][mask], data['time'][mask]
-print("Contents of capture24.npz:", data.files)
 
-# Hold out some participants for testing the model
-pids_test = [2, 3]  # participants 2 & 3
-mask_test = np.isin(pid, pids_test)
+DATASET_PATH = 'dataset/'  # path to your extracted windows
+X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features
+print(f'Content of {DATASET_PATH}')
+print(os.listdir(DATASET_PATH))
+
+with open(DATASET_PATH+'info.json', 'r') as f:
+    info = json.load(f)  # load metadata
+
+X = np.memmap(DATASET_PATH+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
+Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
+T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
+P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+X_feats = pd.read_pickle('X_feats.pkl')
+
+print('X shape:', X.shape)
+print('Y shape:', Y.shape)
+print('T shape:', T.shape)
+print('P shape:', P.shape)
+print('X_feats shape:', X_feats.shape)
+
+# %% [markdown]
+'''
+## Train/test split
+'''
+
+# %%
+
+# Take out 10 participants
+test_ids = ['002', '003', '004', '005', '006', 
+            '007', '008', '009', '010', '011']
+mask_test = np.isin(P, test_ids)
 mask_train = ~mask_test
-X_train, y_train, pid_train, time_train = \
-    X_feats[mask_train], y[mask_train], pid[mask_train], time[mask_train]
-X_test, y_test, pid_test, time_test = \
-    X_feats[mask_test], y[mask_test], pid[mask_test], time[mask_test]
+X_train, Y_train, P_train, T_train = \
+    X_feats[mask_train], Y[mask_train], P[mask_train], T[mask_train]
+X_test, Y_test, P_test, T_test = \
+    X_feats[mask_test], Y[mask_test], P[mask_test], T[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
-# %%
-''' ###### Baseline
+# %% [markdown]
+''' 
+## Train a random forest classifier
 
-Train the random forest and evaluate on the held out participants
-
-*Note: this takes a few minutes*
+*Note: this may take a while*
 '''
 
 # %%
-# Training
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
-classifier.fit(X_train, y_train)
-Y_oob = classifier.oob_decision_function_
-prior, emission, transition = utils.train_hmm(Y_oob, y_train)
+clf = BalancedRandomForestClassifier(
+    n_estimators=2000,
+    replacement=True,
+    sampling_strategy='not minority',
+    n_jobs=4,
+    random_state=42,
+    verbose=1
+)
+clf.fit(X_train, Y_train)
 
-# Testing
-y_test_pred = utils.viterbi(classifier.predict(X_test), prior, emission, transition)
-print("\n--- Baseline performance ---")
-utils.print_scores(utils.compute_scores(y_test, y_test_pred))
+Y_test_pred = clf.predict(X_test)
+print('\nClassifier performance')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0)) 
+
+# %% [markdown]
+'''
+## Robustness to unforseen scenarios
+
+What if the subjects in the test set wore the device differently from
+those in the training set? For example, suppose that all the subjects in the
+training set were right-handed, but the test subjects are left-handed.
+This would more or less result in the device being rotated.
+
+<img src="wrist_accelerometer.jpg" width="200"/>
+
+Let's generate an artificial test set simulating this scenario by flipping
+two of the axes signs (it does not exactly simulate a rotation since the
+movement dynamics are also mirrored, but it is enough for our demonstration
+purposes).
+'''
 
 # %%
-'''
-## Robustness to unforseen circumstances
+# Split raw data into train and test set
+# X[mask_train] and X[mask_test] if you like to live dangerously
+X_raw_train = utils.ArrayFromMask(X, mask_train)
+X_raw_test = utils.ArrayFromMask(X, mask_test)
 
-What would our performance be if our two left-out participants happened to wear the device with a different orientation?
-For example: Suppose that all our training participants wore the device on their right hand, then how would our model perform on participants that wore the device on their left hand?
-This scenario corresponds to a 180 degrees rotation around the z-axis:
-<img src="wrist_accelerometer.jpg" width="400"/>
-Let's generate a pseudo-test set simulating this scenario. In the following,
-we first load the raw triaxial accelerometer data so that we can perform the
-rotation on it, then we use our utility function to extract hand-crafted features (see
-`utils.Extractor`) on the rotated raw data.
-
-'''
-
-# %%
-# Load the raw triaxial data to perform the rotation on it
-X_raw = np.load('X_raw.npy', mmap_mode='r')
-# X_raw = np.load('X_raw_small.npy')
-# Grab the five participants and hold out those for testing
-# X_raw[mask_train] and X_raw[mask_test] if you like to live dangerously
-X_raw = utils.ArrayFromMask(X_raw, mask)
-X_raw_train = utils.ArrayFromMask(X_raw, mask_train)
-X_raw_test = utils.ArrayFromMask(X_raw, mask_test)
-
-# Initialize feature extractor -- this needs to be done only once
-extractor = utils.Extractor()
-
-print("Extracting features on pseudo-test set...")
-X_test_rot = np.empty_like(X_test)
-y_test_rot = y_test.copy()
+print("Creating test set with 'rotated device'...")
+X_rot_test = []
 for i in tqdm(range(X_raw_test.shape[0])):
-    # Rotate instance around z-axis and extract features
+    # Rotate device
     x = X_raw_test[i].copy()
-    x[0,:] *= -1
-    x[1,:] *= -1
-    X_test_rot[i] = extractor.extract(x)
+    x[:,1] *= -1
+    x[:,2] *= -1
+    X_rot_test.append(utils.extract_features(x))
+X_rot_test = pd.DataFrame(X_rot_test)
+
+# %% [markdown]
+''' ### Performance on simulated test set '''
 
 # %%
-''' ###### How does the baseline model perform on the pseudo-set? '''
 
-# %%
-y_test_rot_pred = utils.viterbi(
-    classifier.predict(X_test_rot), prior, emission, transition)
-print("\n--- Performance of baseline model on pseudo-test set ---")
-utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
+X_rot_test = pd.DataFrame(X_rot_test)
 
-# %%
+Y_rot_test_pred = clf.predict(X_rot_test)
+print('\nClassifier performance -- simulated test set')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_rot_test_pred, zero_division=0)) 
+
+# %% [markdown]
 '''
-The model score has dropped drastically.
-Let's visualize the predicted activities for participant #3 and the pseudo-participant #3 (with rotated device):
-'''
+The model performance is notably worse on the simulated set. The solution is
+simply to augment the training dataset with the rotation &mdash; in
+general, with transformations that we wish our model to be invariant to. In
+our case, we wish our model to perform well no matter how the device was
+worn.
 
-# %%
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
-)
-fig.suptitle('participant #3', fontsize='small')
-fig.show()
+## Data augmentation
 
-fig, _ = utils.plot_activity(
-    X_test_rot[pid_test==3][:,0], y_test_rot_pred[pid_test==3], time_test[pid_test==3]
-)
-fig.suptitle('pseudo-participant #3', fontsize='small')
-fig.show()
-
-# %%
-'''
-As we see, the activity plot has changed significantly &mdash; the model is not
-robust to participants wearing the device differently.
-Ideally, we would like our model to perform well regardless of
-how the device was worn.
-
-###### Data augmentation
-
-We can incorporate the desired invariance by simply augmenting our training set and re-training the model:
 '''
 
 # %%
-print("\nExtracting features on pseudo-training set...")
-X_train_rot = np.empty_like(X_train)
-y_train_rot = y_train.copy()
+print("Creating training set with 'rotated device'...")
+X_rot_train = []
 for i in tqdm(range(X_raw_train.shape[0])):
-    # Rotate instance around z-axis and extract features
+    # Rotate device
     x = X_raw_train[i].copy()
-    x[0,:] *= -1
-    x[1,:] *= -1
-    X_train_rot[i] = extractor.extract(x)
+    x[:,1] *= -1
+    x[:,2] *= -1
+    X_rot_train.append(utils.extract_features(x))
+X_rot_train = pd.DataFrame(X_rot_train)
 
-# Add in the "new data" to training set
-X_train = np.concatenate((X_train, X_train_rot))
-y_train = np.concatenate((y_train, y_train_rot))
-print("Shape of new augmented X_train:", X_train.shape)
+# Add the "new data" to training set
+X_aug_train = pd.concat((X_train, X_rot_train))
+Y_aug_train = np.concatenate((Y_train, Y_train))
+print("X_aug_train shape:", X_aug_train.shape)
 
-# %%
-''' ###### Re-train the model on the augmented training set
+# %% [markdown]
+''' ### Re-train and check performance
 
-*Note: this takes a few minutes*
+*Note: this may take a while*
 '''
 
 # %%
-classifier = RandomForestClassifier(n_estimators=100, oob_score=True, n_jobs=4, verbose=True)
-classifier.fit(X_train, y_train)
-Y_oob = classifier.oob_decision_function_
-prior, emission, transition = utils.train_hmm(Y_oob, y_train)
-
-# %%
-''' ###### Re-evaluate the model '''
-
-# %%
-print("\n--- Performance of re-trained model on the original test set ---")
-y_test_pred = utils.viterbi(classifier.predict(X_test), prior, emission, transition)
-utils.print_scores(utils.compute_scores(y_test, y_test_pred))
-
-print("\n--- Performance of re-trained model on the pseudo-test set ---")
-y_test_rot_pred = utils.viterbi(classifier.predict(X_test_rot), prior, emission, transition)
-utils.print_scores(utils.compute_scores(y_test_rot, y_test_rot_pred))
-
-fig, _ = utils.plot_activity(
-    X_test[pid_test==3][:,0], y_test_pred[pid_test==3], time_test[pid_test==3]
+clf = BalancedRandomForestClassifier(
+    n_estimators=2000,
+    replacement=True,
+    sampling_strategy='not minority',
+    n_jobs=4,
+    random_state=42,
+    verbose=1
 )
-fig.suptitle('participant #3', fontsize='small')
-fig.show()
+clf.fit(X_aug_train, Y_aug_train)
 
-fig, _ = utils.plot_activity(
-    X_test_rot[pid_test==3][:,0], y_test_rot_pred[pid_test==3], time_test[pid_test==3]
-)
-fig.suptitle('pseudo-participant #3', fontsize='small')
-fig.show()
+Y_rot_test_pred = clf.predict(X_rot_test)
+print('\nClassifier performance -- augmented model on simulated test set')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_rot_test_pred, zero_division=0)) 
 
-# %%
+# %% [markdown]
 '''
-As we see, by data-augmenting the training set with the desired invariance
-the model prediction is more robust to wear variations.
-
-###### Ideas
-
-- What other invariances should we want our model to learn?
-- Re-run the notebook on the whole dataset. Can you explain the reduced discrepancy?
+Some of the performance is recovered with the augmented model.
 '''
