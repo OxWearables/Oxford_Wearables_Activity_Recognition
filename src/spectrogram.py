@@ -126,9 +126,9 @@ fig.show()
 '''
 ## Architecture design
 
-As a baseline, let's use a convolutional neural network (CNN) with a
-typical pyramid-like structure. The input to the network is a `(N,3,61,61)`
-array, corresponding to `N` spectrograms for each axis signal. Again, not the
+As a baseline, let's use a convolutional neural network (CNN) with a typical
+pyramid-like structure. The input to the network is a `(N,3,61,61)` array,
+corresponding to `N` spectrograms for each axis signal. Again, note the
 *channels-first* format: `(3,61,61)` instead of `(61,61,3)`.
 
 The output of the CNN is a `(N,num_labels)` array where each row contains
@@ -183,16 +183,13 @@ class CNN(nn.Module):
 '''
 ## Helper functions
 
-- A data loader to provide the mini-batches during training.
-- A function to forward-pass the model on a dataset by chunks &mdash; this is simply to prevent the memory from blowing up.
-- A function to evaluate the model to track performance during training.
 '''
 
 # %%
 def create_dataloader(X, y=None, batch_size=1, shuffle=False):
-    ''' Create a (batch) iterator over the dataset. Alternatively, use PyTorch's
-    Dataset and DataLoader classes -- See
-    https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
+    ''' Create a (batch) iterator over the dataset. 
+    Alternatively, use PyTorch's Dataset and DataLoader classes.
+    See https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
 
     # Spectrogram parameters
     N_FFT = 120
@@ -303,13 +300,9 @@ for i in tqdm(range(num_epoch)):
         # Logging -- track train loss
         losses.append(loss.item())
 
-    # -------------------------------------------------------------------------
-    # Evaluate performance at the end of each epoch (full loop through the
-    # training set). We could also do this at every iteration, but this would
-    # be very expensive since we are evaluating on a large dataset.
-    # Aditionally, at the end of each epoch we train a Hidden Markov Model to
-    # smooth the predictions of the CNN.
-    # -------------------------------------------------------------------------
+    # --------------------------------------------------------
+    #       Evaluate performance at the end of each epoch 
+    # --------------------------------------------------------
 
     # Logging -- average train loss in this epoch
     loss_history_train.append(np.mean(losses))
@@ -333,6 +326,7 @@ ax.set_xlabel('epoch')
 ax = ax.twinx()
 ax.plot(kappa_history, color='C2', label='kappa')
 ax.set_ylabel('kappa')
+ax.grid(True)
 fig.legend()
 fig.show()
 
@@ -341,18 +335,3 @@ Y_test_pred_lab = labels[results['Y_pred']]  # to labels
 Y_test_lab = labels[Y_test]  # to labels
 print('\nClassifier performance')
 print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab)) 
-
-
-# %%
-'''
-###### Ideas
-
-- Use ideas from previous sections, e.g. add the spectrogram of the vector magnitude signal.
-- Transfer learning: consider grabbing [available](https://pytorch.org/docs/stable/torchvision/models.html) pre-trained image recognition models and adapting them to our task.
-
-###### References
-
-- [A recipe for training neural networks](http://karpathy.github.io/2019/04/25/recipe/)
-- [PyTorch's Conv2d module](https://pytorch.org/docs/stable/nn.html#torch.nn.Conv2d)
-
-'''
