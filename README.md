@@ -1,4 +1,4 @@
-# Oxford CDT/HDS Data Challenge: Activity recognition on the Capture24 dataset
+# Oxford CDT/HDS Data Challenge: Activity recognition on the Capture-24 dataset
 
 ## Setup instructions in the VMs
 1. Load and initialize Anaconda. This needs to be done only once (you may not need to run this if you already see `(bash)` written in front of your prompt).
@@ -8,21 +8,24 @@
    conda init bash
    ```
    Exit and re-login so that the above takes effect.
-3. Create an anaconda environment from the provided requirements YAML file: 
+3. Create an anaconda environment from the provided requirements YAML file:
    ```bash
-   conda env create -f wearables-condaenv.yml
+   conda env create -f environment.yml
    ```
-4. You are now ready to use the environment: 
+   If you face issues with this, maybe try editing the last line of
+   `environemnt.yml` where it says `prefix: ~/anaconda3/envs/cdt_wearables` and make it point to your
+   Anaconda installation.
+4. You are now ready to use the environment:
    ```bash
-   conda activate wearables
+   conda activate cdt_wearables
    ```
    In future logins, you only need to run this last command.
 
 ## Datasets
 
 The data required to run the notebooks can be found in
-`/cdtshared/wearables/`. **Important:** Don't copy any data in there to own
-devices. Also, avoid copying the data to your VM's `$HOME`.
+`/cdtshared/wearables/`.
+Don't copying the data to your own `$HOME` to avoid blowing up the storage.
 Instead, change the absolute paths in the notebooks where necessary.
 Or better, create a soft link:
 ```bash
@@ -30,9 +33,12 @@ ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current lo
 ```
 
 ## Evaluation
-On the presentation day, show `metrics.classification_report` and `metrics.cohen_kappa` of your model under 10-fold cross-validation (CV). Remember to fold using the participant IDs.
-If you used 10-fold CV for hyperparameter tuning, you must use a different
-10-fold for reporting. Report the median and interquartile range for each metric, e.g. `.75 (.61, .82)`.
+On the presentation day, show `metrics.classification_report`,
+`metrics.cohen_kappa`, and `metrics.f1_score(..., average='macro')` for your
+model under 5-fold cross-validation (CV). Remember to do this using the
+participant IDs. Also, if you used 5-fold CV for hyperparameter
+tuning, you must re-randomize the 5-fold splits for the final scores. Report the
+mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 
 ## How to run Jupyter notebooks remotely
 
