@@ -2,23 +2,23 @@
 '''
 # Long short-term memory
 
-We saw that accounting for the temporal dependency helps to improve performance.
-We found improvements with a hidden Markov model, but also using a simple
-mode smoothing.
-Here we look at using a more flexible model &mdash; the Long short-term
-memory (LSTM) &mdash; to model the temporal dependency and smooth the predictions of
-a random forest.
+We saw that accounting for the temporal dependency is critical to improve
+performance.  We found improvements with a hidden Markov model, but also using a
+simple mode smoothing.
+Here we look at using a more flexible model &mdash; the Long short-term memory
+(LSTM) &mdash; to model the temporal dependency and smooth the predictions of a
+random forest.
 
 ## Setup
 '''
 
 # %%
 import os
-import json
 import numpy as np
 import pandas as pd
 from imblearn.ensemble import BalancedRandomForestClassifier
 from sklearn import metrics
+from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 
@@ -28,7 +28,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 
-import utils  # helper functions -- check out utils.py
+import utils
 
 # For reproducibility
 np.random.seed(42)
@@ -45,28 +45,26 @@ else:
 
 # %%
 
-DATASET_PATH = 'dataset/'  # path to your extracted windows
-X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features
+# Path to your extracted windows
+DATASET_PATH = 'processed_data/'
+X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features, if have one
 print(f'Content of {DATASET_PATH}')
 print(os.listdir(DATASET_PATH))
 
-with open(DATASET_PATH+'info.json', 'r') as f:
-    info = json.load(f)  # load metadata
-
-Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
-T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
-P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+X = np.load(DATASET_PATH+'X.npy')
+Y = np.load(DATASET_PATH+'Y.npy')
+T = np.load(DATASET_PATH+'T.npy')
+pid = np.load(DATASET_PATH+'pid.npy')
 X_feats = pd.read_pickle('X_feats.pkl')
 
-labels = np.unique(Y)
-num_labels = len(labels)
+# As before, let's map the text annotations to simplified labels
+ANNO_LABEL_DICT_PATH = 'capture24/annotation-label-dictionary.csv'
+anno_label_dict = pd.read_csv(ANNO_LABEL_DICT_PATH, index_col='annotation', dtype='string')
+Y = anno_label_dict.loc[Y, 'label:Willetts2018'].to_numpy()
 
-Y = np.where(Y.reshape(-1,1)==labels)[1]  # to numeric
-
-print('Y shape:', Y.shape)
-print('T shape:', T.shape)
-print('P shape:', P.shape)
-print('X_feats shape:', X_feats.shape)
+# Transform to numeric
+le = LabelEncoder().fit(Y)
+Y = le.transform(Y)
 
 # %% [markdown]
 '''
@@ -75,20 +73,19 @@ print('X_feats shape:', X_feats.shape)
 
 # %%
 
-# Take out 10 participants
-test_ids = ['002', '003', '004', '005', '006', 
-            '007', '008', '009', '010', '011']
-mask_test = np.isin(P, test_ids)
+# Hold out participants P101-P151 for testing (51 participants)
+test_ids = [f'P{i}' for i in range(101,152)]
+mask_test = np.isin(pid, test_ids)
 mask_train = ~mask_test
-X_train, Y_train, P_train, T_train = \
-    X_feats[mask_train], Y[mask_train], P[mask_train], T[mask_train]
-X_test, Y_test, P_test, T_test = \
-    X_feats[mask_test], Y[mask_test], P[mask_test], T[mask_test]
+X_train, Y_train, T_train, pid_train = \
+    X_feats[mask_train], Y[mask_train], T[mask_train], pid[mask_train]
+X_test, Y_test, T_test, pid_test = \
+    X_feats[mask_test], Y[mask_test], T[mask_test], pid[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
 # %% [markdown]
-''' 
+'''
 ## Train a random forest classifier
 
 *Note: this may take a while*
@@ -108,7 +105,7 @@ clf.fit(X_train, Y_train)
 
 Y_test_pred = clf.predict(X_test)
 print('\nClassifier performance')
-print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0)) 
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0))
 
 # This will be the training set
 Y_in_train = clf.oob_decision_function_.astype('float32')
@@ -122,20 +119,20 @@ Y_in_test = clf.predict_proba(X_test).astype('float32')
 As a baseline, let's use a single-layer bidirectional LSTM.
 PyTorch uses a sligtly unintuitive array format for the input and output of
 its LSTM module.
-The array shape for both input and output is `(seq_length,N,num_labels)`, corresponding to 
-`N` sequences of `seq_length` elements of size `num_labels`. 
+The array shape for both input and output is `(seq_length,N,num_labels)`, corresponding to
+`N` sequences of `seq_length` elements of size `num_labels`.
 Here, each element is a vector of label probabilities/logits.
 '''
 
 # %%
 class LSTM(nn.Module):
     ''' Single-layer bidirectional LSTM '''
-    def __init__(self, input_size=5, output_size=5, hidden_size=1024):
+    def __init__(self, input_size=5, output_size=5, hidden_size=1024, num_layers=2, bias=True, dropout=.5):
         super(LSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, bias, dropout=dropout, bidirectional=True)
         self.hidden2output = nn.Linear(2*hidden_size, output_size)
 
     def forward(self, sequence):
@@ -156,8 +153,8 @@ class LSTM(nn.Module):
 def create_dataloader(Y, y=None, seq_length=5, batch_size=1, shuffle=False, eval_mode=False):
     ''' Create a (batch) iterator over the dataset. It yields (batches of)
     sequences of consecutive rows of `Y` and `y` of length `seq_length` (can
-    be less than `seq_length` in `eval_mode=True`). 
-    
+    be less than `seq_length` in `eval_mode=True`).
+
     The below code looks complicated but all it's trying to do is to pack
     sequences of equal length where applicable, else provide the sequences
     one by one.
@@ -202,7 +199,7 @@ def create_dataloader(Y, y=None, seq_length=5, batch_size=1, shuffle=False, eval
 
 
 def forward_by_batches(lstm, Y_in, seq_length):
-    ''' Forward pass model on a dataset. 
+    ''' Forward pass model on a dataset.
     Do this by batches so that we don't blow up the memory. '''
     Y_out = []
     lstm.eval()
@@ -236,33 +233,37 @@ def evaluate_model(lstm, Y_in, Y, seq_length):
 ''' ## Hyperparameters, model instantiation, loss function and optimizer '''
 
 # %%
-hidden_size = 128  # size of LSTM's hidden state
-input_size = output_size = num_labels
-seq_length = 5  # max num of elems to consider for smoothing (temporal horizon)
+hidden_size = 1024  # size of LSTM's hidden state
+num_layers = 2  # num layers in the LSTM module
+dropout = .5  # dropout rate in LSTM module
+input_size = output_size = len(np.unique(Y))
+seq_length = 5  # max num of elems to consider for smoothing (the time horizon)
 num_epoch = 5  # num of epochs (full loops though the training set)
-lr = 1e-3  # learning rate
+lr = 3e-4  # learning rate
 batch_size = 32  # size of the mini-batch
 
 lstm = LSTM(
     input_size=input_size,
     output_size=output_size,
-    hidden_size=hidden_size
+    hidden_size=hidden_size,
+    num_layers=num_layers,
+    dropout=dropout
 ).to(device)
 print(lstm)
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(lstm.parameters(), lr=lr, amsgrad=True)
+optimizer = optim.Adam(lstm.parameters(), lr=lr)
 
 # %% [markdown]
 ''' ## Training '''
 
 # %%
-kappa_history = []
-loss_history = []
+kappa_history_test = []
+loss_history_test = []
 loss_history_train = []
+losses = []
 for i in tqdm(range(num_epoch)):
     dataloader = create_dataloader(Y_in_train, Y_train, seq_length, batch_size, shuffle=True)
-    losses = []
     for sequence, target in dataloader:
         sequence, target = sequence.to(device), target.to(device)
         lstm.zero_grad()
@@ -275,16 +276,16 @@ for i in tqdm(range(num_epoch)):
         losses.append(loss.item())
 
     # --------------------------------------------------------
-    #       Evaluate performance at the end of each epoch 
+    #       Evaluate performance at the end of each epoch
     # --------------------------------------------------------
 
     # Logging -- average train loss in this epoch
-    loss_history_train.append(np.mean(losses))
+    loss_history_train.append(utils.ewm(losses))
 
     # Logging -- evaluate performance on test set
-    results = evaluate_model(lstm, Y_in_test, Y_test, seq_length) 
-    loss_history.append(results['loss'])
-    kappa_history.append(results['kappa'])
+    results = evaluate_model(lstm, Y_in_test, Y_test, seq_length)
+    loss_history_test.append(results['loss'])
+    kappa_history_test.append(results['kappa'])
 
 # %% [markdown]
 ''' ## Model performane '''
@@ -293,24 +294,30 @@ for i in tqdm(range(num_epoch)):
 # Loss history
 plt.close('all')
 fig, ax = plt.subplots()
-ax.plot(loss_history_train, color='C0', label='train')
-ax.plot(loss_history, color='C1', label='test')
+ax.plot(loss_history_train, color='C0', label='train loss')
+ax.plot(loss_history_test, color='C1', label='test loss')
 ax.set_ylabel('loss (CE)')
 ax.set_xlabel('epoch')
 ax = ax.twinx()
-ax.plot(kappa_history, color='C2', label='kappa')
+ax.plot(kappa_history_test, color='C2', label='kappa')
 ax.set_ylabel('kappa')
 ax.grid(True)
 fig.legend()
 fig.show()
 
 # Report
-Y_test_pred_lab = labels[results['Y_pred']]  # to labels
-Y_test_lab = labels[Y_test]  # to labels
+Y_test_pred_lab = le.inverse_transform(results['Y_pred'])  # back to text labels
+Y_test_lab = le.inverse_transform(Y_test)  # back to text labels
 print('\nClassifier performance')
-print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab)) 
+print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab))
 
 # %% [markdown]
-''' Oops! The model seems to overfit very quickly. '''
+''' Uh-oh! The model seems to overfit very quickly. '''
 
-# %%
+# %% [markdown]
+'''
+### Things to try
+- Regularization. Early stopping.
+- CNN (CNN-LSTM)
+- Architecture design, optimizer, etc.
+'''
