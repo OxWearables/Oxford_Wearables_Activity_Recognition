@@ -25,11 +25,12 @@
 
 The data required to run the notebooks can be found in
 `/cdtshared/wearables/`.
-Don't copying the data to your own `$HOME` to avoid blowing up the storage.
+Don't copy the data to your own `$HOME` to avoid blowing up the storage.
 Instead, change the absolute paths in the notebooks where necessary.
 Or better, create a soft link:
 ```bash
 ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current location
+ln -s /cdtshared/wearables/processed_data/ processed_data
 ```
 
 ## Evaluation
