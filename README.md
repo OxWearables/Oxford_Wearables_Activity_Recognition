@@ -63,3 +63,6 @@ mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 1. Finally, copy the URL from step 1. Then in your local machine, open
 Chrome and paste the URL, but change the port to the local port (or do nothing else if you used the same port).
 You should be able see the notebooks now.
+
+## Miscellaneous
+Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
