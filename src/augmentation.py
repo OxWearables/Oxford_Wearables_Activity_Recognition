@@ -1,57 +1,46 @@
-# %% [markdown] 
+# %% [markdown]
 '''
 # Data augmentation
 
 Data augmentation is a straighforward way to artificially increase the size
-of the dataset by applying transformations to the data. It is very useful
-when the dataset is small, or to reduce overfitting in large models.
-But not all transformations are applicable. For example, for image
-recognition it may not matter if the image is rotated, flipped or stretched.
-On the other hand, flipping and rotating may not be a good idea for
-handwriting recognition (e.g. a "p" gets turned into a "q" or "b", a "6" into
-a "9"). The key is to find *invariances* of the *learning task*.
+of the dataset while embedding invariances into the model.
 
 ## Setup
 '''
 # %%
 import os
-import json
 import numpy as np
 import pandas as pd
 from imblearn.ensemble import BalancedRandomForestClassifier
 from sklearn import metrics
 from tqdm.auto import tqdm
-import utils  # helper functions -- check out utils.py
 
 # For reproducibility
 np.random.seed(42)
 
 # %% [markdown]
-''' 
-## Load dataset 
+'''
+## Load dataset
 '''
 
 # %%
 
-DATASET_PATH = 'dataset/'  # path to your extracted windows
-X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features
+# Path to your extracted windows
+DATASET_PATH = 'processed_data/'
+X_FEATS_PATH = 'X_feats.pkl'  # path to your extracted features, if have one
 print(f'Content of {DATASET_PATH}')
 print(os.listdir(DATASET_PATH))
 
-with open(DATASET_PATH+'info.json', 'r') as f:
-    info = json.load(f)  # load metadata
-
-X = np.memmap(DATASET_PATH+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
-Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
-T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
-P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+X = np.load(DATASET_PATH+'X.npy', mmap_mode='r')
+Y = np.load(DATASET_PATH+'Y.npy')
+T = np.load(DATASET_PATH+'T.npy')
+pid = np.load(DATASET_PATH+'pid.npy')
 X_feats = pd.read_pickle('X_feats.pkl')
 
-print('X shape:', X.shape)
-print('Y shape:', Y.shape)
-print('T shape:', T.shape)
-print('P shape:', P.shape)
-print('X_feats shape:', X_feats.shape)
+# As before, let's map the text annotations to simplified labels
+ANNO_LABEL_DICT_PATH = 'capture24/annotation-label-dictionary.csv'
+anno_label_dict = pd.read_csv(ANNO_LABEL_DICT_PATH, index_col='annotation', dtype='string')
+Y = anno_label_dict.loc[Y, 'label:Willetts2018'].to_numpy()
 
 # %% [markdown]
 '''
@@ -60,20 +49,19 @@ print('X_feats shape:', X_feats.shape)
 
 # %%
 
-# Take out 10 participants
-test_ids = ['002', '003', '004', '005', '006', 
-            '007', '008', '009', '010', '011']
-mask_test = np.isin(P, test_ids)
+# Hold out participants P101-P151 for testing (51 participants)
+test_ids = [f'P{i}' for i in range(101,152)]
+mask_test = np.isin(pid, test_ids)
 mask_train = ~mask_test
-X_train, Y_train, P_train, T_train = \
-    X_feats[mask_train], Y[mask_train], P[mask_train], T[mask_train]
-X_test, Y_test, P_test, T_test = \
-    X_feats[mask_test], Y[mask_test], P[mask_test], T[mask_test]
+X_train, Y_train, T_train, pid_train = \
+    X_feats[mask_train], Y[mask_train], T[mask_train], pid[mask_train]
+X_test, Y_test, T_test, pid_test = \
+    X_feats[mask_test], Y[mask_test], T[mask_test], pid[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
 # %% [markdown]
-''' 
+'''
 ## Train a random forest classifier
 
 *Note: this may take a while*
@@ -92,7 +80,7 @@ clf.fit(X_train, Y_train)
 
 Y_test_pred = clf.predict(X_test)
 print('\nClassifier performance')
-print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0)) 
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0))
 
 # %% [markdown]
 '''
@@ -100,51 +88,62 @@ print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zer
 
 What if the subjects in the test set wore the device differently from
 those in the training set? For example, suppose that all the subjects in the
-training set were right-handed, but the test subjects are left-handed.
-This would more or less result in the device being rotated.
+training set were right-handed, then the model could underperform on a test
+subject who is left-handed. This would more or less result in the device having
+been rotated. Another typical scenario happens when we want our model to be
+deployable on other accelerometer devices with different axis orientations.
 
 <img src="wrist_accelerometer.jpg" width="200"/>
 
-Let's generate an artificial test set simulating this scenario by flipping
-two of the axes signs (it does not exactly simulate a rotation since the
-movement dynamics are also mirrored, but it is enough for our demonstration
-purposes).
+Let's generate an artificial test set simulating this scenario by flipping two
+of the axes signs (this may simulate a different device specs, but it does not
+exactly simulate handedness since the movement dynamics are also mirrored, but
+it is enough to demonstrate our point). For this, we will need to grab the raw
+test data, rotate it, and re-compute the same features.
 
 *Note: this may take a while*
 '''
 
 # %%
-# Split raw data into train and test set
-# X[mask_train] and X[mask_test] if you like to live dangerously
-X_raw_train = utils.ArrayFromMask(X, mask_train)
-X_raw_test = utils.ArrayFromMask(X, mask_test)
+
+def extract_features(xyz):
+    ''' Extract features. xyz is an array of shape (N,3) '''
+
+    feats = {}
+    feats['xMean'], feats['yMean'], feats['zMean'] = np.mean(xyz, axis=0)
+    feats['xStd'], feats['yStd'], feats['zStd'] = np.std(xyz, axis=0)
+    v = np.linalg.norm(xyz, axis=1)  # magnitude stream
+    feats['mean'], feats['std'] = np.mean(v), np.std(v)
+
+    return feats
+
+# %%
 
 print("Creating test set with 'rotated device'...")
-X_rot_test = []
+X_raw_test = X[mask_test]
+X_test_new = []
 for i in tqdm(range(X_raw_test.shape[0])):
     # Rotate device
     x = X_raw_test[i].copy()
     x[:,1] *= -1
     x[:,2] *= -1
-    X_rot_test.append(utils.extract_features(x))
-X_rot_test = pd.DataFrame(X_rot_test)
+    X_test_new.append(extract_features(x))
+X_test_new = pd.DataFrame(X_test_new)
 
 # %% [markdown]
 ''' ### Performance on simulated test set '''
 
 # %%
 
-Y_rot_test_pred = clf.predict(X_rot_test)
+Y_test_new_pred = clf.predict(X_test_new)
 print('\nClassifier performance -- simulated test set')
-print('Out of sample:\n', metrics.classification_report(Y_test, Y_rot_test_pred, zero_division=0)) 
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_new_pred, zero_division=0))
 
 # %% [markdown]
 '''
-The model performance is notably worse on the simulated set. The solution is
-simply to augment the training dataset with the rotation &mdash; in
-general, with transformations that we wish our model to be invariant to. In
-our case, we wish our model to perform well no matter how the device was
-worn.
+The model performance is notably worse on the simulated test set. The solution
+is to simply augment the training dataset with the same rotation &mdash; we want
+our model to perform well no matter how/what device was worn.
 
 ## Data augmentation
 
@@ -153,22 +152,23 @@ worn.
 
 # %%
 print("Creating training set with 'rotated device'...")
-X_rot_train = []
+X_raw_train = X[mask_train]
+X_train_new = []
 for i in tqdm(range(X_raw_train.shape[0])):
     # Rotate device
     x = X_raw_train[i].copy()
     x[:,1] *= -1
     x[:,2] *= -1
-    X_rot_train.append(utils.extract_features(x))
-X_rot_train = pd.DataFrame(X_rot_train)
+    X_train_new.append(extract_features(x))
+X_train_new = pd.DataFrame(X_train_new)
 
 # Add the "new data" to training set
-X_aug_train = pd.concat((X_train, X_rot_train))
+X_aug_train = pd.concat((X_train, X_train_new))
 Y_aug_train = np.concatenate((Y_train, Y_train))
 print("X_aug_train shape:", X_aug_train.shape)
 
 # %% [markdown]
-''' ### Re-train and check performance
+''' ### Re-train with augmented dataset
 
 *Note: this may take a while*
 '''
@@ -184,11 +184,23 @@ clf = BalancedRandomForestClassifier(
 )
 clf.fit(X_aug_train, Y_aug_train)
 
-Y_rot_test_pred = clf.predict(X_rot_test)
+# %% [markdown]
+'''
+# Re-check performance
+'''
+
+# %%
+Y_test_new_pred = clf.predict(X_test_new)
 print('\nClassifier performance -- augmented model on simulated test set')
-print('Out of sample:\n', metrics.classification_report(Y_test, Y_rot_test_pred, zero_division=0)) 
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_new_pred, zero_division=0))
+
+Y_test_pred = clf.predict(X_test)
+print('\nClassifier performance -- augmented model on original test set')
+print('Out of sample:\n', metrics.classification_report(Y_test, Y_test_pred, zero_division=0))
 
 # %% [markdown]
 '''
-Some of the performance is recovered with the augmented model.
+Most of the performance loss is recovered with the augmented model.
+Also, note how that the performance on the original test set remained almost
+unchanged.
 '''

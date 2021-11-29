@@ -2,19 +2,19 @@
 '''
 # Neural networks in activity recognition
 
-Engineering effective features is one of the most laborious parts of machine
-learning. 
-The appeal of modern neural networks is that feature enginnering is 
-integrated into the training process &mdash; they automatically engineer
-features that are relevant for the learning task, directly from the raw
-representation of the data
+Engineering effective features is one of the most time-consuming parts of
+machine learning.
+The appeal of neural networks is that feature enginnering is integrated into the
+training process &mdash; they automatically engineer features that are relevant
+for the learning task directly from the raw representation of the data
 
 ## Setup
 '''
 
 # %%
-import json
+import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
@@ -22,7 +22,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from sklearn import metrics
+from sklearn.preprocessing import LabelEncoder
 from tqdm.auto import tqdm
+
 import utils
 
 # For reproducibility
@@ -39,31 +41,30 @@ else:
     print("Using {}".format(device))
 
 # %% [markdown]
-''' 
-## Load dataset 
+'''
+## Load dataset
 '''
 
 # %%
 
-DATASET_PATH = 'dataset/'  # path to your extracted windows
+# Path to your extracted windows
+DATASET_PATH = 'processed_data/'
+print(f'Content of {DATASET_PATH}')
+print(os.listdir(DATASET_PATH))
 
-with open(DATASET_PATH+'info.json', 'r') as f:
-    info = json.load(f)
+X = np.load(DATASET_PATH+'X.npy', mmap_mode='r')
+Y = np.load(DATASET_PATH+'Y.npy')
+T = np.load(DATASET_PATH+'T.npy')
+pid = np.load(DATASET_PATH+'pid.npy')
 
-X = np.memmap(DATASET_PATH+'X.dat', mode='r', dtype=info['X_dtype'], shape=tuple(info['X_shape']))
-Y = np.memmap(DATASET_PATH+'Y.dat', mode='r', dtype=info['Y_dtype'], shape=tuple(info['Y_shape']))
-T = np.memmap(DATASET_PATH+'T.dat', mode='r', dtype=info['T_dtype'], shape=tuple(info['T_shape']))
-P = np.memmap(DATASET_PATH+'P.dat', mode='r', dtype=info['P_dtype'], shape=tuple(info['P_shape']))
+# As before, let's map the text annotations to simplified labels
+ANNO_LABEL_DICT_PATH = 'capture24/annotation-label-dictionary.csv'
+anno_label_dict = pd.read_csv(ANNO_LABEL_DICT_PATH, index_col='annotation', dtype='string')
+Y = anno_label_dict.loc[Y, 'label:Willetts2018'].to_numpy()
 
-labels = np.unique(Y)
-num_labels = len(labels)
-
-Y = np.where(Y.reshape(-1,1)==labels)[1]  # to numeric
-
-print('X shape:', X.shape)
-print('Y shape:', Y.shape)
-print('T shape:', T.shape)
-print('P shape:', P.shape)
+# Transform to numeric
+le = LabelEncoder().fit(Y)
+Y = le.transform(Y)
 
 # %% [markdown]
 '''
@@ -72,15 +73,14 @@ print('P shape:', P.shape)
 
 # %%
 
-# Take out 10 participants
-test_ids = ['002', '003', '004', '005', '006', 
-            '007', '008', '009', '010', '011']
-mask_test = np.isin(P, test_ids)
+# Hold out participants P101-P151 for testing (51 participants)
+test_ids = [f'P{i}' for i in range(101,152)]
+mask_test = np.isin(pid, test_ids)
 mask_train = ~mask_test
-X_train, Y_train, P_train, T_train = \
-    utils.ArrayFromMask(X, mask_train), Y[mask_train], P[mask_train], T[mask_train]
-X_test, Y_test, P_test, T_test = \
-    utils.ArrayFromMask(X, mask_test), Y[mask_test], P[mask_test], T[mask_test]
+X_train, Y_train, T_train, pid_train = \
+    X[mask_train], Y[mask_train], T[mask_train], pid[mask_train]
+X_test, Y_test, T_test, pid_test = \
+    X[mask_test], Y[mask_test], T[mask_test], pid[mask_test]
 print("Shape of X_train:", X_train.shape)
 print("Shape of X_test:", X_test.shape)
 
@@ -154,8 +154,8 @@ class CNN(nn.Module):
 
 # %%
 def create_dataloader(X, y=None, batch_size=1, shuffle=False):
-    ''' Create a (batch) iterator over the dataset. Alternatively, use PyTorch's
-    Dataset and DataLoader classes -- See
+    ''' Create a (batch) iterator over the dataset. Alternatively, you can use
+    PyTorch's Dataset and DataLoader classes -- See
     https://pytorch.org/tutorials/beginner/data_loading_tutorial.html '''
     if shuffle:
         idxs = np.random.permutation(np.arange(len(X)))
@@ -175,7 +175,7 @@ def create_dataloader(X, y=None, batch_size=1, shuffle=False):
 
 
 def forward_by_batches(cnn, X):
-    ''' Forward pass model on a dataset. 
+    ''' Forward pass model on a dataset.
     Do this by batches so that we don't blow up the memory. '''
     Y = []
     cnn.eval()
@@ -203,11 +203,11 @@ def evaluate_model(cnn, X, Y):
 ''' ## Hyperparameters, model instantiation, loss function and optimizer '''
 
 # %%
-num_filters_init = 8  # initial num of filters -- see class definition
+num_filters_init = 32  # initial num of filters -- see class definition
 in_channels = 3  # num of channels of the signal -- equal to 3 for our raw triaxial timeseries
-output_size = num_labels  # num of classes (sleep, sedentary, etc...)
+output_size = len(np.unique(Y))  # num of classes (sleep, sedentary, etc...)
 num_epoch = 5  # num of epochs (full loops though the training set)
-lr = 1e-3  # learning rate
+lr = 3e-4  # learning rate
 batch_size = 32  # size of the mini-batch
 
 cnn = CNN(
@@ -218,7 +218,7 @@ cnn = CNN(
 print(cnn)
 
 loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(cnn.parameters(), lr=lr, amsgrad=True)
+optimizer = optim.Adam(cnn.parameters(), lr=lr)
 
 # %% [markdown]
 '''
@@ -227,12 +227,12 @@ optimizer = optim.Adam(cnn.parameters(), lr=lr, amsgrad=True)
 '''
 
 # %%
-kappa_history = []
-loss_history = []
+kappa_history_test = []
+loss_history_test = []
 loss_history_train = []
+losses = []
 for i in tqdm(range(num_epoch)):
     dataloader = create_dataloader(X_train, Y_train, batch_size, shuffle=True)
-    losses = []
     for x, target in dataloader:
         x, target = x.to(device), target.to(device)
         cnn.zero_grad()
@@ -245,16 +245,16 @@ for i in tqdm(range(num_epoch)):
         losses.append(loss.item())
 
     # --------------------------------------------------------
-    #       Evaluate performance at the end of each epoch 
+    #       Evaluate performance at the end of each epoch
     # --------------------------------------------------------
 
     # Logging -- average train loss in this epoch
-    loss_history_train.append(np.mean(losses))
+    loss_history_train.append(utils.ewm(losses))
 
     # Logging -- evalutate performance on test set
     results = evaluate_model(cnn, X_test, Y_test)
-    loss_history.append(results['loss'])
-    kappa_history.append(results['kappa'])
+    loss_history_test.append(results['loss'])
+    kappa_history_test.append(results['kappa'])
 
 # %% [markdown]
 ''' ## Model performane '''
@@ -263,21 +263,28 @@ for i in tqdm(range(num_epoch)):
 # Loss history
 plt.close('all')
 fig, ax = plt.subplots()
-ax.plot(loss_history_train, color='C0', label='train')
-ax.plot(loss_history, color='C1', label='test')
+ax.plot(loss_history_train, color='C0', label='train loss')
+ax.plot(loss_history_test, color='C1', label='test loss')
 ax.set_ylabel('loss (CE)')
 ax.set_xlabel('epoch')
 ax = ax.twinx()
-ax.plot(kappa_history, color='C2', label='kappa')
+ax.plot(kappa_history_test, color='C2', label='kappa')
 ax.set_ylabel('kappa')
 ax.grid(True)
 fig.legend()
 fig.show()
 
 # Report
-Y_test_pred_lab = labels[results['Y_pred']]  # to labels
-Y_test_lab = labels[Y_test]  # to labels
+Y_test_pred_lab = le.inverse_transform(results['Y_pred'])  # back to text labels
+Y_test_lab = le.inverse_transform(Y_test)  # back to text labels
 print('\nClassifier performance')
-print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab)) 
+print('Out of sample:\n', metrics.classification_report(Y_test_lab, Y_test_pred_lab))
 
-# %%
+# %% [markdown]
+'''
+### Things to try
+- Class balancing
+- Mode smoothing, HMM (Q: How to estimate the emission matrix?)
+- LSTM (CNN-LSTM)
+- Architecture design, optimizer, etc.
+'''
