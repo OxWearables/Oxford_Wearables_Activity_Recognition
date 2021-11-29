@@ -33,6 +33,11 @@ ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current lo
 ln -s /cdtshared/wearables/processed_data/ processed_data
 ```
 
+The folder `capture24/` contains CSV files for the accelerometer recordings,
+with header `time,x,y,z,annotation`. The folder `processed_data/` contains numpy
+arrays `X.npy`, `Y.npy`, `T.npy` and `pid.npy` that represent the same data but
+chunked into windows of 30 sec. See the intro notebook for more details.
+
 ## Evaluation
 On the presentation day, show `metrics.classification_report`,
 `metrics.cohen_kappa`, and `metrics.f1_score(..., average='macro')` for your
