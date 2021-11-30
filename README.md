@@ -70,4 +70,5 @@ Chrome and paste the URL, but change the port to the local port (or do nothing e
 You should be able see the notebooks now.
 
 ## Miscellaneous
-Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
+- Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
+- If you're using VSCode, it has a nice extension for [remote development](https://code.visualstudio.com/docs/remote/ssh) as well as support for [Jupyter notebooks](https://code.visualstudio.com/docs/datascience/jupyter-notebooks). Check if your editor has these features.
