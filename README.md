@@ -48,6 +48,8 @@ mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 
 ## How to run Jupyter notebooks remotely
 
+If you're using VSCode, it has a nice extension for [remote development](https://code.visualstudio.com/docs/remote/ssh) as well as support for [Jupyter notebooks](https://code.visualstudio.com/docs/datascience/jupyter-notebooks). Check if your editor has these features. Otherwise, see the following instructions:
+
 1. In your remote machine, launch a Jupyter notebook with a specified port, e.g. 9000:
    ```bash
    jupyter-notebook --no-browser --port=9000
@@ -69,6 +71,4 @@ mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 Chrome and paste the URL, but change the port to the local port (or do nothing else if you used the same port).
 You should be able see the notebooks now.
 
-## Miscellaneous
-- Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
-- If you're using VSCode, it has a nice extension for [remote development](https://code.visualstudio.com/docs/remote/ssh) as well as support for [Jupyter notebooks](https://code.visualstudio.com/docs/datascience/jupyter-notebooks). Check if your editor has these features.
+Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
