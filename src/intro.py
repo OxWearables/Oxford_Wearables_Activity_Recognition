@@ -313,10 +313,8 @@ def load_all_and_make_windows(datafiles):
 ## References
 **Feature extraction**
 
+- [On the role of features in human activity recognition](https://dl.acm.org/doi/10.1145/3341163.3347727)
 - [A Comprehensive Study of Activity Recognition Using Accelerometers](https://www.mdpi.com/2227-9709/5/2/27)
-- [Physical activity classification using the GENEA wrist-worn accelerometer](https://www.ncbi.nlm.nih.gov/pubmed/21988935)
-- [Activity recognition using a single accelerometer placed at the wrist or ankle](https://www.ncbi.nlm.nih.gov/pubmed/23604069)
-- [Hip and Wrist Accelerometer Algorithms for Free-Living Behavior Classification](https://www.ncbi.nlm.nih.gov/pubmed/26673126)
 
 **Papers using the Capture-24 dataset**
 
