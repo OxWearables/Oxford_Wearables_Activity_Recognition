@@ -10,6 +10,8 @@
    Exit and re-login so that the above takes effect.
 3. Create an anaconda environment from the provided requirements YAML file:
    ```bash
+   git clone https://github.com/activityMonitoring/Oxford_Wearables_Activity_Recognition.git
+   cd Oxford_Wearables_Activity_Recognition
    conda env create -f environment.yml
    ```
    If you face issues with this, maybe try editing the last line of
