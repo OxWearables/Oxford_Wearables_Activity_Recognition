@@ -55,25 +55,23 @@ mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 
 If you're using VSCode, it has a nice extension for [remote development](https://code.visualstudio.com/docs/remote/ssh) as well as support for [Jupyter notebooks](https://code.visualstudio.com/docs/datascience/jupyter-notebooks). Check if your editor has these features. Otherwise, see the following instructions:
 
-1. In your remote machine, launch a Jupyter notebook with a specified port, e.g. 9000:
+1. In your remote machine, launch a Jupyter notebook with a specified port, e.g. 1234:
    ```bash
-   jupyter-notebook --no-browser --port=9000
+   jupyter-notebook --no-browser --port=1234
    ```
    This will output something like:
    ```bash
    To access the notebook, open this URL:
-   http://localhost:9000/?token=
+   http://localhost:1234/?token=
    b3ee74d492a6348430f3b74b52309060dcb754e7bf3d6ce4
    ```
 
-1. On your local machine, perform port-forwarding, e.g. the following forwards the remote port 9000 to the local port 8888:
+1. On your local machine, perform port-forwarding, e.g. the following forwards the remote port 1234 to the local port 1234:
    ```bash
-   ssh -N -f -L localhost:8888:localhost:9000 username@remote_address
+   ssh -N -f -L localhost:1234:localhost:1234 username@remote_address
    ```
-   Note: You can use the same port numbers for both local and remote.
+   Note: You can use same or different port numbers for local and remote.
 
-1. Finally, copy the URL from step 1. Then in your local machine, open
-Chrome and paste the URL, but change the port to the local port (or do nothing else if you used the same port).
-You should be able see the notebooks now.
+Now you should be able to open the link from step 1 in any browser.
 
-Source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
+BTW source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
