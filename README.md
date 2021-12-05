@@ -1,23 +1,26 @@
 # Oxford CDT/HDS Data Challenge: Activity recognition on the Capture-24 dataset
 
 ## Setup instructions in the VMs
-1. Load and initialize Anaconda. This needs to be done only once (you may not need to run this if you already see `(bash)` written in front of your prompt).
+1. Load and initialize Anaconda. This needs to be done only once (you may not need to run this if you already see `(base)` written in front of your prompt).
 
    ```bash
    module load Anaconda3
    conda init bash
    ```
    Exit and re-login so that the above takes effect.
-3. Create an anaconda environment from the provided requirements YAML file:
+1. Download this repo:
    ```bash
    git clone https://github.com/activityMonitoring/Oxford_Wearables_Activity_Recognition.git
-   cd Oxford_Wearables_Activity_Recognition
+   cd Oxford_Wearables_Activity_Recognition/
+   ```
+1. Create an anaconda environment from the provided requirements YAML file:
+   ```bash
    conda env create -f environment.yml
    ```
-   If you face issues with this, maybe try editing the last line of
+   If you get any errors, maybe editing the last line of
    `environemnt.yml` where it says `prefix: ~/anaconda3/envs/cdt_wearables` and make it point to your
    Anaconda installation.
-4. You are now ready to use the environment:
+1. You are now ready to use the environment:
    ```bash
    conda activate cdt_wearables
    ```
