@@ -13,14 +13,14 @@
    git clone https://github.com/activityMonitoring/Oxford_Wearables_Activity_Recognition.git
    cd Oxford_Wearables_Activity_Recognition/
    ```
-1. Create an anaconda environment from the provided requirements YAML file:
+1. Create an anaconda environment using the provided YAML file:
    ```bash
    conda env create -f environment.yml
    ```
-   If you get any errors, maybe editing the last line of
+   If you get any errors, maybe try editing the last line of
    `environemnt.yml` where it says `prefix: ~/anaconda3/envs/cdt_wearables` and make it point to your
    Anaconda installation.
-1. You are now ready to use the environment:
+1. Finally, activate the environment:
    ```bash
    conda activate cdt_wearables
    ```
@@ -55,7 +55,7 @@ mean, min and max of the CV scores, e.g. `.75 (.61, .82)`.
 
 If you're using VSCode, it has a nice extension for [remote development](https://code.visualstudio.com/docs/remote/ssh) as well as support for [Jupyter notebooks](https://code.visualstudio.com/docs/datascience/jupyter-notebooks). Check if your editor has these features. Otherwise, see the following instructions:
 
-1. In your remote machine, launch a Jupyter notebook with a specified port, e.g. 1234:
+1. In your **remote machine**, launch a Jupyter notebook with a specified port, e.g. 1234:
    ```bash
    jupyter-notebook --no-browser --port=1234
    ```
@@ -66,12 +66,12 @@ If you're using VSCode, it has a nice extension for [remote development](https:/
    b3ee74d492a6348430f3b74b52309060dcb754e7bf3d6ce4
    ```
 
-1. On your local machine, perform port-forwarding, e.g. the following forwards the remote port 1234 to the local port 1234:
+1. In your **local machine**, perform port-forwarding, e.g. the following forwards the remote port 1234 to the local port 1234:
    ```bash
    ssh -N -f -L localhost:1234:localhost:1234 username@remote_address
    ```
    Note: You can use same or different port numbers for local and remote.
 
-Now you should be able to open the link from step 1 in any browser.
+Now you should be able to access the URL link obtained in step 1 and see the notebooks.
 
 BTW source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
