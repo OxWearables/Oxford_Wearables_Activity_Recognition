@@ -68,7 +68,7 @@ If you're using VSCode, it has a nice extension for [remote development](https:/
 
 1. In your **local machine**, perform port-forwarding, e.g. the following forwards the remote port 1234 to the local port 1234:
    ```bash
-   ssh -N -f -L localhost:1234:localhost:1234 username@remote_address
+   ssh -N -f -L 1234:localhost:1234 username@remote_address
    ```
    Note: You can use same or different port numbers for local and remote.
 
