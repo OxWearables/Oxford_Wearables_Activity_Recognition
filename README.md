@@ -75,3 +75,6 @@ If you're using VSCode, it has a nice extension for [remote development](https:/
 Now you should be able to access the URL link obtained in step 1 and see the notebooks.
 
 BTW source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
+
+## License
+See [license](LICENSE.md) before using these materials.
