@@ -9,8 +9,6 @@ $ git clone https://github.com/OxWearables/Oxford_Wearables_Activity_Recognition
 $ cd Oxford_Wearables_Activity_Recognition/
 # install environment with necessary dependencies
 $ conda env create -f environment.yml
-# or on a Mac install environment with necessary dependencies
-$ conda env create -f environment_macos.yml
 # activate environment
 $ conda activate wearables_workshop
 # launch notebook
