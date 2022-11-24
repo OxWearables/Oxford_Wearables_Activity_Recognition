@@ -1,6 +1,7 @@
 name: wearables_workshop
 channels:
   - conda-forge
+  - pytorch
   - defaults
 dependencies:
   - _libgcc_mutex=0.1
@@ -117,6 +118,7 @@ dependencies:
   - python-dateutil=2.8.2
   - python-fastjsonschema=2.15.1
   - python_abi=3.9
+  - pytorch=1.12.1
   - pytz=2021.3
   - pyzmq=22.3.0
   - qt=5.9.7
@@ -136,6 +138,8 @@ dependencies:
   - threadpoolctl=3.1.0
   - tk=8.6.12
   - toml=0.10.2
+  - torchaudio=0.12.1
+  - torchvision=0.13.1
   - tornado=6.1
   - tqdm=4.64.0
   - traitlets=5.1.1
