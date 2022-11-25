@@ -17,12 +17,10 @@
    ```bash
    conda env create -f environment.yml
    ```
-   If you get any errors, maybe try editing the last line of
-   `environemnt.yml` where it says `prefix: ~/anaconda3/envs/cdt_wearables` and make it point to your
    Anaconda installation.
 1. Finally, activate the environment:
    ```bash
-   conda activate cdt_wearables
+   conda activate wearables_workshop
    ```
    In future logins, you only need to run this last command.
 
