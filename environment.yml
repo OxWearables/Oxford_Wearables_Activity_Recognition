@@ -144,6 +144,7 @@ dependencies:
   - tornado=6.1
   - tqdm=4.64.0
   - traitlets=5.1.1
+  - transforms3d=0.4.1
   - typing-extensions=4.1.1
   - typing_extensions=4.1.1
   - tzdata=2022a
@@ -156,4 +157,6 @@ dependencies:
   - zipp=3.8.0
   - zlib=1.2.12
   - zstd=1.5.2
+  - pip:
+    - actipy==1.1.0
 prefix:
