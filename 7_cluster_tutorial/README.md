@@ -169,7 +169,7 @@ Deploying your model on the UK Biobank accelerometer data follows the exact same
 You should also have a working Anaconda environment for your model. Create it on BMRC with the usual methods.
 
 ### Model test
-You should add your own model to `template.py` and test it first on the sample file that you copied in the previous step `sample.cwa.gz`. Do this on your VM (not on BMRC). Your BMRC work folder is available on the VM under the same path `/well/doherty/projects/cdt/users/<username>`.
+You should add your own model to `template.py` and test it first on the sample file that you copied in the previous step `sample.cwa.gz`. Do this on your VM (not on BMRC), or on your local machine. Your BMRC work folder is available on the VM under the same path `/well/doherty/projects/cdt/users/<username>`.
 
 `python template.py sample.cwa.gz`
 

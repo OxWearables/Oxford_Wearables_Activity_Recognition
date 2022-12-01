@@ -172,11 +172,15 @@ if __name__ == '__main__':
 
     # do your phenotype / summary statistics work on the predicted time series here
     # (you could also do it before reindexing, it depends on how you will handle missing values in the predicted series)
-    # add your phenotypes as a column to the 'summary' dataframe (keep 'eid' as the first column)
+    # add your phenotypes as a column to the 'summary' dataframe (keep the existing columns like 'eid' and 'weartime')
     # Your new phenotypes should be scalar values, add each one as a separate column ('summary' should only have 1 row)
 
     summary = pd.DataFrame({
-        'eid': pid
+        'eid': pid,
+        'StartTime': info['StartTime'],
+        'EndTime': info['EndTime'],
+        'WearTime(days)': info['WearTime(days)'],
+        'CalibrationOK': info['CalibOK']
     }, index=[0])
 
     summary['my_sleep_phenotype'] = 0.5  # just an example, do actual phenotyping on the predicted time series
@@ -196,7 +200,6 @@ if __name__ == '__main__':
 
     Path(path).mkdir(parents=True, exist_ok=True)
     df_pred.to_csv(os.path.join(path, pid + '.csv'), index_label='timestamp')
-    info.to_csv(os.path.join(path, pid + '_info.csv'), index=False)
     summary.to_csv(os.path.join(path, pid + '_summary.csv'), index=False)
 
     end_time = datetime.now()
