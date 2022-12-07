@@ -196,13 +196,38 @@ In the hello world example, each command was executed in 1 task. For UKB deploym
 
 Reminder: `template.py` (with your model), `ukb-short.txt` and `ukb-short.sh` should all exist in the same folder, and that should be your current directory when submitting the job.
 
-After confirming your model works on `ukb-short`, generate the final script to run it on the whole dataset. Also give a heads-up to your tutor before submitting. This time use a batch size of 30. This will take at least ~10 hours depending on your model, so it's best to do it overnight. We reserved capacity on BMRC for the full job, which is accessed with the `--reservation` parameter to `sbatch`. You can follow the progress with the `sq` command.
+### Participant selection
+
+After confirming your model works on `ukb-short.txt`, we can generate the final script to run it on the whole dataset. If you know beforehand that only a subset will have the medical outcome data that you're analysing, we can do one more filtering step to deploy the model only on this cohort. This is optional - if you're unsure of your cohort at the time of submission, you can use `ukb-full.txt`. But doing the participant selection will speed up the computation.
+
+Using the RAP system, generate a text file `include.txt` that contains line-by-line the `eid` of the participants in your cohort (a csv file with 1 column, the `eid` header is optional):
+
+```
+eid
+1234567
+8901234
+5678901
+2345678
+9012345
+```
+
+Make sure this file does **NOT** have an empty line at the end. 
+
+Copy the file from the RAP to your user folder on the VM at `/well/doherty/projects/cdt/users/<username>` (see the instructions [here](https://oxwearables.github.io/wearable-teaching/prac5-6-association-analysis-in-uk-biobank#getting-files-between-the-vm-and-the-rap-using-the-command-line-interface)). Do **NOT** download this file to your local machine: the `eid` is patient information.
+
+Then you can use `grep` to filter the entries in `ukb-full.txt` that match the include file:
 
 ```bash
-python write-BMRC-script.py ukb-full.txt --batch 30 --conda wearables_workshop 
+grep -f include.txt ukb-full.txt > ukb-selection.txt
+```
+
+Inpect `ukb-selection.txt` to see if it only contains your cohort's participants. Now generate the final submission script from `ukb-selection.txt`. Also give a heads-up to your tutor before submitting. This time use a batch size of 25. This will take anywhere from a few hours to a day, depending on your model and cohort size, so it's best to do it overnight. We reserved capacity on BMRC for the full job, which is accessed with the `--reservation` parameter to `sbatch`. You can follow the progress with the `sq` command.
+
+```bash
+python write-BMRC-script.py ukb-selection.txt --batch 25 --conda wearables_workshop 
 
 # use reserved capacity for the full job
-sbatch --reservation=doherty_546 ukb-full.sh
+sbatch --reservation=doherty_546 ukb-selection.sh
 
 sq
 ```
