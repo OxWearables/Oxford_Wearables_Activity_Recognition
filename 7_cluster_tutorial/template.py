@@ -11,7 +11,6 @@ Output:
     Prediction DataFrame in {eid}.csv format, stored in OUTPUT_PATH
     If the input file is stored in a groupX folder, output will be in OUTPUT_PATH/groupX/
     A {eid}_summary.csv file with the calculated phenotype: 1 row, an 'eid' column followed by the phenotype column(s)
-    An {eid}_info.csv file will also be saved with the actipy info dict.
 """
 
 import actipy
