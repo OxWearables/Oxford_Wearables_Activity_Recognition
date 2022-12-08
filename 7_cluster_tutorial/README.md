@@ -173,7 +173,7 @@ You should add your own model to `template.py` and test it first on the sample f
 
 `python template.py sample.cwa.gz`
 
-After confirming this works and produces the expected output, move on to the next step.
+The output will be stored in the `output` folder. After confirming this works and produces the expected output, move on to the next step.
 
 ### UKB submission script
 
@@ -223,7 +223,12 @@ grep -f include.txt ukb-full.txt > ukb-selection.txt
 
 Inpect `ukb-selection.txt` to see if it only contains your cohort's participants. Now generate the final submission script from `ukb-selection.txt`. Also give a heads-up to your tutor before submitting. This time use a batch size of 25. This will take anywhere from a few hours to a day, depending on your model and cohort size, so it's best to do it overnight. We reserved capacity on BMRC for the full job, which is accessed with the `--reservation` parameter to `sbatch`. You can follow the progress with the `sq` command.
 
+Tip: empty the `output` folder before submitting your job, so that it only contains the output files from your final deployment.
+
 ```bash
+# delete output files from before (copy any files you need to keep to another folder!)
+rm -r output/*
+
 python write-BMRC-script.py ukb-selection.txt --batch 25 --conda wearables_workshop 
 
 # use reserved capacity for the full job
@@ -231,3 +236,26 @@ sbatch --reservation=doherty_546 ukb-selection.sh
 
 sq
 ```
+
+## Summary file aggregation
+After successful model deployment, the `output` folder will contain the predicted time series and summary files for each participant, located in their respective group folders (e.g.: `group1/123456.csv` and `group1/123456_summary.csv`). 
+
+To simplify working with the summary files, we can aggregate the individual summary files together into 1 large `summary.csv` file, with one participant per row. Use the `merge_summary.py` script available in this repo. This script takes as argument the location of your `output` folder. You'll also need to install `dask` in your conda environment. 
+
+Do this on the VM. Reminder: you don't need to copy the output files from BMRC to the VM, your BMRC work folder (that contains your model output) is available under `/well/doherty/projects/cdt/users/<username>` on both systems.
+
+```bash
+# do this on the VM
+conda activate wearables_workshop
+conda install dask
+
+# cd into the folder that contains the output folder
+# if you submitted your job from the tutorial folder, your output folder will be in:
+cd /well/doherty/projects/cdt/users/<username>/Oxford_Wearables_Activity_Recognition/7_cluster_tutorial
+
+# this can take a few minutes
+python merge_summary.py ./output
+# summary saved to ./output/summary.csv
+```
+
+You can then use the aggregated `summary.csv` file for your epi analysis.
