@@ -72,7 +72,7 @@ def plot_compare(t, y_true, y_pred, trace=None, min_trace=0, max_trace=1):
     if trace is not None:  # normalize
         if isinstance(trace, (pd.DataFrame, pd.Series)):
             trace = trace.to_numpy()
-        trace = (trace - np.min(trace)) / np.max(trace)
+        trace = (trace - np.min(trace)) / (np.max(trace) - np.min(trace))
 
     # uniform resampling
     data = pd.DataFrame({'y_true': y_true, 'y_pred': y_pred, 'trace': trace}, index=t).asfreq('30s')
