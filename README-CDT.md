@@ -1,39 +1,50 @@
-# Oxford Activity Recognition Workshop: Instructions for CDT students
+# Oxford Activity Recognition Workshop: Instructions for Oxford CDT students
 
-## Setup instructions in the VMs
+## Getting started
+
 1. Load and initialize Anaconda. This needs to be done only once (you may not need to run this if you already see `(base)` written in front of your prompt).
 
-   ```bash
+   ```console
    module load Anaconda3
    conda init bash
    ```
    Exit and re-login so that the above takes effect.
-1. Download this repo:
-   ```bash
-   git clone https://github.com/activityMonitoring/Oxford_Wearables_Activity_Recognition.git
-   cd Oxford_Wearables_Activity_Recognition/
-   ```
-1. Create an anaconda environment using the provided YAML file:
-   ```bash
-   conda env create -f environment.yml
-   ```
-   Anaconda installation.
-1. Finally, activate the environment:
-   ```bash
-   conda activate wearables_workshop
-   ```
-   In future logins, you only need to run this last command.
+1. Create a conda environment called `wearables-workshop` with minimal requirements (Python, git, Java):
+    ```console
+    conda create -n wearables-workshop python=3.9 git pip openjdk
+    ```
+1. Activate the environment:
+    ```console
+    conda activate wearables-workshop
+    ```
+    Your prompt should now show `(wearables-workshop)`.
+1. Download workshop materials:
+    ```console
+    git clone https://github.com/OxWearables/Oxford_Wearables_Activity_Recognition.git
+    ```
+1. Navigate to workshop directory:
+    ```console
+    cd Oxford_Wearables_Activity_Recognition/
+    ```
+1. Install requirements for this workshop:
+    ```console
+    pip install -r requirements.txt
+    ```
+1. Launch notebook:
+    ```console
+    jupyter notebook
+    ```
 
 ## Datasets
 
-The data required to run the notebooks can be found in the shared path
-`/cdtshared/wearables/`.
-Don't copy the data to your own `$HOME` to avoid blowing up the storage.
-Instead, change the absolute paths in the notebooks where necessary.
-Or better, create a soft link:
-```bash
-ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut in current location
-ln -s /cdtshared/wearables/processed_data/ processed_data
+The data required for this workshop can be found in the shared path
+`/cdtshared/wearables/`, so **you don't need to download it again in the notebooks**.
+Do NOT copy the data to your `$HOME` directory to avoid blowing up the storage.
+Instead, change the absolute paths in the corresponding notebooks, or create a soft link:
+```console
+cd  # go to $HOME
+ln -s /cdtshared/wearables/capture24/ capture24  # create shortcut named 'capture24' in current directory
+ln -s /cdtshared/wearables/processed_data/ processed_data  # create shortcut named 'processed_data' in current directory
 ```
 
 The folder `capture24/` contains CSV files for the accelerometer recordings,
@@ -59,22 +70,27 @@ Check if your editor has these features. Otherwise, see the following
 instructions:
 
 1. In your **remote machine**, launch a Jupyter notebook with a specified port, e.g. 1234:
-   ```bash
+   ```console
    jupyter-notebook --no-browser --port=1234
    ```
    This will output something like:
-   ```bash
+   ```console
    To access the notebook, open this URL:
    http://localhost:1234/?token=
    b3ee74d492a6348430f3b74b52309060dcb754e7bf3d6ce4
    ```
 
 1. In your **local machine**, perform port-forwarding, e.g. the following forwards the remote port 1234 to the local port 1234:
-   ```bash
+   ```console
    ssh -N -f -L 1234:localhost:1234 username@remote_address
    ```
-   Note: You can use same or different port numbers for local and remote.
 
 Now you should be able to access the URL link obtained in step 1 and see the notebooks.
 
-BTW source code for the notebooks can be found in `src/` in case you prefer to work with pure Python instead.
+## Troubleshooting
+
+#### I'm getting "insufficient memory" errors
+
+This is likely due to having several notebooks open and running. Make sure to
+shutdown the notebooks that are no longer in use: Go to main menu, select notebook and click "Shutdown". Note that just closing the tab is not enough.
+
