@@ -2,6 +2,8 @@
 
 ## Getting started
 
+***NOTE FOR OXFORD CDT STUDENTS:*** See [alternative instructions](README-CDT.md).
+
 1. Download and install Anaconda or Miniconda: https://docs.conda.io/projects/miniconda/en/latest/
 1. Create a conda environment called `wearables-workshop` with minimal requirements (Python, git, Java):
     ```console
