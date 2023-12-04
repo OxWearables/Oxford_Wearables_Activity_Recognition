@@ -18,7 +18,7 @@ cd /well/doherty/projects/cdt/users/<username>
 git clone https://github.com/OxWearables/Oxford_Wearables_Activity_Recognition
 
 # cd into the tutorial folder
-cd Oxford_Wearables_Activity_Recognition/7_cluster_tutorial
+cd Oxford_Wearables_Activity_Recognition/7_cluster_computing
 
 # copy additional files to this folder
 cp /well/doherty/projects/cdt/shared/write-BMRC-script.py ./
