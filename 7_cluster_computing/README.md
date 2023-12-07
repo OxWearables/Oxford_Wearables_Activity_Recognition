@@ -184,10 +184,10 @@ In `/well/doherty/projects/cdt/shared/` you can find files that contain the comm
 
 You should have already copied `ukb-short.txt` to the tutorial folder in the previous part. Inspect this file with `head ukb-short.txt`. This file follows the same structure as the hello world example.
 
-**Test your model first on `ukb-short`.** You still need to create the submission script yourself. This time also pass the name of your conda environment `wearables_workshop` (change this accordingly) and add a new `--batch` parameter:
+**Test your model first on `ukb-short`.** You still need to create the submission script yourself. This time also pass the name of your conda environment `wearables-workshop` (change this accordingly) and add a new `--batch` parameter:
 
 ```bash
-python write-BMRC-script.py ukb-short.txt --batch 2 --conda wearables_workshop 
+python write-BMRC-script.py ukb-short.txt --batch 2 --conda wearables-workshop 
 
 # BMRC sbatch script written to: ukb-short.sh
 ```
@@ -221,7 +221,7 @@ Then you can use `grep` to filter the entries in `ukb-full.txt` that match the i
 grep -f include.txt ukb-full.txt > ukb-selection.txt
 ```
 
-Inpect `ukb-selection.txt` to see if it only contains your cohort's participants. Now generate the final submission script from `ukb-selection.txt`. Also give a heads-up to your tutor before submitting. This time use a batch size of 25. This will take anywhere from a few hours to a day, depending on your model and cohort size, so it's best to do it overnight. We reserved capacity on BMRC for the full job, which is accessed with the `--reservation` parameter to `sbatch`. You can follow the progress with the `sq` command.
+Inpect `ukb-selection.txt` to see if it only contains your cohort's participants. Now generate the final submission script from `ukb-selection.txt`. Also give a heads-up to your tutor before submitting. This time use a batch size of 25. This will take anywhere from a few hours to a day, depending on your model and cohort size, so it's best to do it overnight. We reserved capacity on BMRC for the full job, which is accessed with the `--reservation` parameter to `sbatch`. You can follow the progress with the `squeue -u <username>` command.
 
 Tip: empty the `output` folder before submitting your job, so that it only contains the output files from your final deployment.
 
@@ -229,12 +229,12 @@ Tip: empty the `output` folder before submitting your job, so that it only conta
 # delete output files from before (copy any files you need to keep to another folder!)
 rm -r output/*
 
-python write-BMRC-script.py ukb-selection.txt --batch 25 --conda wearables_workshop 
+python write-BMRC-script.py ukb-selection.txt --batch 25 --conda wearables-workshop 
 
 # use reserved capacity for the full job
 sbatch --reservation=doherty_546 ukb-selection.sh
 
-sq
+squeue -u <username>
 ```
 
 ## Summary file aggregation
@@ -246,7 +246,7 @@ Do this on the VM. Reminder: you don't need to copy the output files from BMRC t
 
 ```bash
 # do this on the VM
-conda activate wearables_workshop
+conda activate wearables-workshop
 conda install dask
 
 # cd into the folder that contains the output folder
