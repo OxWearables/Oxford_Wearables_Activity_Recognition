@@ -232,7 +232,7 @@ rm -r output/*
 python write-BMRC-script.py ukb-selection.txt --batch 25 --conda wearables-workshop 
 
 # use reserved capacity for the full job
-sbatch --reservation=doherty_546 ukb-selection.sh
+sbatch --reservation=<reservation_code> ukb-selection.sh
 
 squeue -u <username>
 ```
