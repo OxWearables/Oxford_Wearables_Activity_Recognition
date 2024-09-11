@@ -4,3 +4,7 @@ __pycache__
 capture24
 capture24.zip
 processed_data
+8_stepcount/OxWalk_Dec2022.zip
+8_stepcount/OxWalk_Dec2022
+8_stepcount/*.pkl
+8_stepcount/*.npy
