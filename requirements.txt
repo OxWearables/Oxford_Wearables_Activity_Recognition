@@ -13,3 +13,4 @@ torch
 torchaudio
 torchvision
 actipy>=3
+stepcount
