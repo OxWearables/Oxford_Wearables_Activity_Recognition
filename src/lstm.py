@@ -34,6 +34,7 @@ import utils
 np.random.seed(42)
 torch.manual_seed(42)
 cudnn.benchmark = True
+N_JOBS = 2
 
 # Grab a GPU if there is one
 if torch.cuda.is_available():
@@ -97,7 +98,7 @@ clf = BalancedRandomForestClassifier(
     replacement=True,
     sampling_strategy='not minority',
     oob_score=True,
-    n_jobs=4,
+    n_jobs=N_JOBS,
     random_state=42,
     verbose=1
 )
