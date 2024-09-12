@@ -35,6 +35,7 @@ import utils
 
 # For reproducibility
 np.random.seed(42)
+N_JOBS = 2
 
 # %% [markdown]
 '''
@@ -229,7 +230,7 @@ clf = BalancedRandomForestClassifier(
     n_estimators=1000,
     replacement=True,
     sampling_strategy='not minority',
-    n_jobs=4,
+    n_jobs=N_JOBS,
     random_state=42,
 )
 clf.fit(X_feats, Y)
@@ -288,7 +289,7 @@ def load_all_and_make_windows(datafiles):
         pid = np.asarray([pid] * len(X))
         return X, Y, T, pid
 
-    results = Parallel(n_jobs=4)(
+    results = Parallel(n_jobs=N_JOBS)(
         delayed(worker)(datafile) for datafile in tqdm(datafiles))
 
     X = np.concatenate([result[0] for result in results])

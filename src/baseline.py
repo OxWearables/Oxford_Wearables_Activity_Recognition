@@ -24,6 +24,7 @@ import utils
 
 # For reproducibility
 np.random.seed(42)
+N_JOBS = 2
 
 # %% [markdown]
 '''
@@ -81,7 +82,7 @@ clf = BalancedRandomForestClassifier(
     replacement=True,
     sampling_strategy='not minority',
     oob_score=True,
-    n_jobs=4,
+    n_jobs=N_JOBS,
     random_state=42,
     verbose=1
 )
