@@ -256,7 +256,7 @@ class WalkDetectorRF:
         hmm_params = hmm_params or dict()
 
         self.clf = BalancedRandomForestClassifier(
-            n_estimators=clf_params.get('n_estimators', 1000),
+            n_estimators=clf_params.get('n_estimators', 100),
             replacement=clf_params.get('replacement', True),
             sampling_strategy=clf_params.get('sampling_strategy', 'not minority'),
             random_state=clf_params.get('random_state', 42),

@@ -17,6 +17,7 @@ from tqdm.auto import tqdm
 
 # For reproducibility
 np.random.seed(42)
+N_JOBS = 2
 
 # %% [markdown]
 '''
@@ -72,7 +73,7 @@ clf = BalancedRandomForestClassifier(
     n_estimators=2000,
     replacement=True,
     sampling_strategy='not minority',
-    n_jobs=4,
+    n_jobs=N_JOBS,
     random_state=42,
     verbose=1
 )
@@ -178,7 +179,7 @@ clf = BalancedRandomForestClassifier(
     n_estimators=2000,
     replacement=True,
     sampling_strategy='not minority',
-    n_jobs=4,
+    n_jobs=N_JOBS,
     random_state=42,
     verbose=1
 )
