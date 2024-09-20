@@ -1,4 +1,4 @@
-jupyter
+#jupyter  # no needed if using prepared Jupyter Lab
 numpy
 scipy
 pandas
@@ -13,4 +13,5 @@ torch
 torchaudio
 torchvision
 actipy>=3
-stepcount
+#stepcount  # too strict versions
+nvidia-ml-py  # for get_gpu.py to auto grab A100 MIGs
