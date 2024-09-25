@@ -20,12 +20,6 @@ git clone https://github.com/OxWearables/Oxford_Wearables_Activity_Recognition
 # cd into the tutorial folder
 cd Oxford_Wearables_Activity_Recognition/7_cluster_computing
 
-# copy additional files to this folder
-cp /well/doherty/projects/cdt/shared/write-BMRC-script.py ./
-cp /well/doherty/projects/cdt/shared/ukb-short.txt ./
-cp /well/doherty/projects/cdt/shared/sample.cwa.gz ./
-```
-
 ## Hello World in parallel
 We'll first illustrate parallel deployment on BMRC with a Hello World example.
 
