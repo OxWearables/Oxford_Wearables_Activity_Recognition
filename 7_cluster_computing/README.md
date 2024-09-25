@@ -172,15 +172,19 @@ Deploying your model on a large dataset follows the exact same flow as the Hello
 You should also have a working Anaconda environment for your model. Create it on BMRC with the usual methods.
 
 ### Smoke test
-You should add your own model to the `template.py` file and test it first on a sample file. Your BMRC work folder is available on the VM under the same path `/well/doherty/projects/cdt/users/<username>`.
+The hardest part of this section is to fit in your model into the `template.py` script and have it run without issues. You can test the `template.py` script on the provided sample file `sample.csv.gz` (1h of recording). You can inspect the first few lines of the sample file with:
 
-`python template.py sample.csv`
+`zcat sample.csv.gz | head`
 
-The output will be stored in the `output` folder. After confirming this works and produces the expected output, move on to the next step.
+To test the script:
+
+`python template.py sample.csv.gz`
+
+The output of the script will be stored in an `output/` folder. After confirming this works and produces the expected output, move on to the next step (you are pretty much done!).
 
 ### Submission script
 
-You can find the file `nhanes-commands.txt` that contains the list of commands to deploy the template you prepared on the accelerometer files. Inspect this file with `head nhanes-commands.txt`. This file follows the same structure as the hello world example.
+You can find the provided file `nhanes-commands.txt` that contains the list of commands to deploy the template you prepared on the accelerometer files (inspect with `head nhanes-commands.txt`). This file follows the same structure as the hello world example.
 
 <!-- **Test your model first on `ukb-short`.** You still need to create the submission script yourself. This time also pass the name of your conda environment `wearables-workshop` (change this accordingly) and add a new `--batch` parameter:
 
@@ -190,7 +194,7 @@ python write-BMRC-script.py ukb-short.txt --batch 2 --conda wearables-workshop
 # BMRC sbatch script written to: ukb-short.sh
 ``` -->
 
-You create your submission script:
+To create your submission script:
 
 ```bash
 python write-BMRC-script.py nhanes-commands.txt
