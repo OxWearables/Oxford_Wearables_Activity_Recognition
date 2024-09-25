@@ -1,27 +1,34 @@
 # Deploying models on a cluster
 
-This tutorial will walk you through the steps to run your model on the UK Biobank accelerometer data. 
+This tutorial will walk you through the steps to deploy your model on a large dataset (e.g. UK Biobank, NHANES).
 
 This is done on the Biomedical Research Computing (BMRC) High Performance Computing (HPC) cluster. This is a cluster of hundreds of machines (nodes) and thousands of cores with a shared storage system. The high number of cores allows for many processes to run in parallel. 
 
-The basic concept is very simple: your model will be run ('deployed') on each accelerometer file, but hundreds of time in parallel. This deployment will be handled by the cluster scheduler system (Slurm). All your python script needs to do is take 1 accelerometer file as the input, run your model, and save the result to disk.
+The basic concept is very simple: your model will be run on each accelerometer file, but hundreds of time in parallel. This deployment will be handled by the cluster scheduler system (SLURM). All your python script needs to do is take 1 accelerometer file as the input, run your model, and save the result to disk.
 
 ## Getting started
-You should have access to the BMRC cluster. Log in with the same credentials as the VM: 
+You should have access to the BMRC cluster. Log in with your credentials:
 
 `ssh <username>@cluster2.bmrc.ox.ac.uk`
 
-Your workspace on BMRC is located in `/well/doherty/projects/cdt/users/<username>` (this folder is also available on the VM). Replace `<username>` with your username. Your code goes here. Start by cloning this repo:
+Your workspace on BMRC is located in `/well/doherty/projects/cdt/users/<username>`.
+Replace `<username>` with your username.
+
+Start by cloning this repo:
 
 ```bash
+# navigate to your workspace
 cd /well/doherty/projects/cdt/users/<username>
+
+# clone the repo
 git clone https://github.com/OxWearables/Oxford_Wearables_Activity_Recognition
 
-# cd into the tutorial folder
+# navigate to the tutorial folder
 cd Oxford_Wearables_Activity_Recognition/7_cluster_computing
+```
 
 ## Hello World in parallel
-We'll first illustrate parallel deployment on BMRC with a Hello World example.
+We'll first illustrate parallel deployment on the cluster with a Hello World example.
 
 Open the file `helloworld.py`. It contains the following script:
 
@@ -47,7 +54,9 @@ python helloworld.py 1
 # (after 10s) Hello World! I am task number 1 on host rescomp1.hpc.in.bmrc.ox.ac.uk.
 ```
 
-Now create a file `commands.txt` that contains the following lines:
+(Note: If you get an error because Python is not loaded, try `module load Python...`).
+
+Now create a file called `hello-commands.txt` and add the following lines:
 
 ```bash
 python helloworld.py 1
@@ -62,42 +71,42 @@ This file contains all the commands that we want the cluster to execute. Each li
 Now use the script `write-BMRC-script.py` to generate a cluster submission script:
 
 ```bash
-python write-BMRC-script.py commands.txt
+python write-BMRC-script.py hello-commands.txt
 
-# BMRC sbatch script written to: commands.sh
+# BMRC sbatch script written to: hello-commands.sh
 ```
 
-This generates the submission script `commands.sh`. You don't need to worry too much about how this script works. The main takeaway is that it takes the contents of `commands.txt` and submits them as parallel tasks to the cluster (a so called 'array job'). The output of each task will be saved to a logfile located in a newly created `logs` folder.
+This generates the submission script `hello-commands.sh`. You don't need to worry too much about how this script works. The main takeaway is that it takes the contents of `hello-commands.txt` and submits them as parallel tasks to the cluster (a so called 'array job'). The output of each task will be saved to a logfile located in a newly created `logs` folder.
 
-Submission is done with the `sbatch` command. **NOTE**: the cluster will use your *current directory* as the working directory when executing each task. It is therefore important that when you submit your job to the cluster, your shell is located in the folder where the `commands.sh`, `commands.txt` and your `helloworld.py` files are located (double check this with `ls`). Remember this for when you're running your own model: keep everything in the same directory and submit your job from there.
+Submission is done with the `sbatch` command. **NOTE**: the cluster will use your *current directory* as the working directory when executing each task. It is therefore important that when you submit your job to the cluster, your shell is located in the folder where the `hello-commands.sh`, `hello-commands.txt` and your `helloworld.py` files are located (double check this with `ls`). Remember this for when you're running your own model: keep everything in the same directory and submit your jobs from there:
 
 ```bash
-sbatch commands.sh
+sbatch hello-commands.sh
 # Submitted batch job 9281943
 ```
 
-Immediately after this, execute `sq`. You will see something like this:
+After this, execute `squeue -u <username>`. You will see something like this:
 
 ```bash
      JOBID PARTITION     NAME     USER    STATE       TIME TIME_LIMI  NODES NODELIST(REASON)
- 9281943_1     short commands   azw524  RUNNING       0:02 1-06:00:00      1 compa025
- 9281943_2     short commands   azw524  RUNNING       0:02 1-06:00:00      1 compa038
- 9281943_3     short commands   azw524  RUNNING       0:02 1-06:00:00      1 compe061
- 9281943_4     short commands   azw524  RUNNING       0:02 1-06:00:00      1 compf005
- 9281943_5     short commands   azw524  RUNNING       0:02 1-06:00:00      1 compe063
+ 9281943_1     short hello-commands   azw524  RUNNING       0:02 1-06:00:00      1 compa025
+ 9281943_2     short hello-commands   azw524  RUNNING       0:02 1-06:00:00      1 compa038
+ 9281943_3     short hello-commands   azw524  RUNNING       0:02 1-06:00:00      1 compe061
+ 9281943_4     short hello-commands   azw524  RUNNING       0:02 1-06:00:00      1 compf005
+ 9281943_5     short hello-commands   azw524  RUNNING       0:02 1-06:00:00      1 compe063
 ```
 
-This shows your list of pending jobs. Note the same job id as the one returned from `sbatch`, with a task number appended. Each task corresponds to a line in `commands.txt`. Your tasks will be either `Pending` or `Running`. In the `Pending` state the scheduler is waiting for a free spot, while `Running` means your task is being executed. 
+This shows your list of pending jobs. Note the same job id as the one returned from `sbatch`, with a task number appended. Each task corresponds to a line in `hello-commands.txt`. Your tasks will be either `Pending` or `Running`. In the `Pending` state the scheduler is waiting for a free spot, while `Running` means your task is being executed. 
 
-When your job is finished, you will find 5 log files in the `./logs` directory, 1 for each command in `commands.txt`:
+When your job is finished, you will find 5 log files in the `./logs` directory, 1 for each command in `hello-commands.txt`:
 
 ```bash
 ls ./logs
-# commands-9281943_1.log
-# commands-9281943_2.log
-# commands-9281943_3.log
-# commands-9281943_4.log
-# commands-9281943_5.log
+# hello-commands-9281943_1.log
+# hello-commands-9281943_2.log
+# hello-commands-9281943_3.log
+# hello-commands-9281943_4.log
+# hello-commands-9281943_5.log
 ```
 
 Inspect them:
@@ -106,7 +115,7 @@ Inspect them:
 more ./logs/* | cat
 
 #::::::::::::::
-#./logs/commands-9281943_1.log
+#./logs/hello-commands-9281943_1.log
 #::::::::::::::
 # 24/11/2022 14:03:28
 # python helloworld.py 1
@@ -115,7 +124,7 @@ more ./logs/* | cat
 # 24/11/2022 14:03:38
 
 #::::::::::::::
-#./logs/commands-9281943_2.log
+#./logs/hello-commands-9281943_2.log
 #::::::::::::::
 # 24/11/2022 14:03:28
 # python helloworld.py 2
@@ -124,7 +133,7 @@ more ./logs/* | cat
 # 24/11/2022 14:03:38
 
 #::::::::::::::
-#./logs/commands-9281943_3.log
+#./logs/hello-commands-9281943_3.log
 #::::::::::::::
 # 24/11/2022 14:03:28
 # python helloworld.py 3
@@ -133,7 +142,7 @@ more ./logs/* | cat
 # 24/11/2022 14:03:38
 
 #::::::::::::::
-#./logs/commands-9281943_4.log
+#./logs/hello-commands-9281943_4.log
 #::::::::::::::
 # 24/11/2022 14:03:28
 # python helloworld.py 4
@@ -142,7 +151,7 @@ more ./logs/* | cat
 # 24/11/2022 14:03:38
 
 #::::::::::::::
-#./logs/commands-9281943_5.log
+#./logs/hello-commands-9281943_5.log
 #::::::::::::::
 # 24/11/2022 14:03:28
 # python helloworld.py 5
@@ -156,41 +165,51 @@ Each file contains the command that's being executed, followed by the output and
 There's one more command that can be useful in the event you need to cancel a running job: `scancel`. This takes the job id that's returned from `sbatch`. So if you wanted to cancel the job from above before it finished, you could do `scancel 9281943`
 
 
-## UK Biobank deployment
+## Deploying on a large dataset
 
-Deploying your model on the UK Biobank accelerometer data follows the exact same flow as the Hello World example above. A template script has been provided in `template.py` for this. The comments in this script will guide you through its usage. The key points are that `template.py` takes the path of an accelerometer file via the command line, reads and extracts the raw data, applies the model and saves the predictions to disk.
+Deploying your model on a large dataset follows the exact same flow as the Hello World example above. A template script has been provided in `template.py` for this. The comments in this script will guide you through its usage. The key points are that `template.py` takes the path of an accelerometer file via the command line, reads and extracts the raw data, applies the model and saves the predictions to disk.
 
 You should also have a working Anaconda environment for your model. Create it on BMRC with the usual methods.
 
-### Model test
-You should add your own model to `template.py` and test it first on the sample file that you copied in the previous step `sample.cwa.gz`. Do this on your VM (not on BMRC), or on your local machine. Your BMRC work folder is available on the VM under the same path `/well/doherty/projects/cdt/users/<username>`.
+### Smoke test
+You should add your own model to the `template.py` file and test it first on a sample file. Your BMRC work folder is available on the VM under the same path `/well/doherty/projects/cdt/users/<username>`.
 
-`python template.py sample.cwa.gz`
+`python template.py sample.csv`
 
 The output will be stored in the `output` folder. After confirming this works and produces the expected output, move on to the next step.
 
-### UKB submission script
+### Submission script
 
-In `/well/doherty/projects/cdt/shared/` you can find files that contain the commands to deploy the template on the UKB accelerometer files:
+You can find the file `nhanes-commands.txt` that contains the list of commands to deploy the template you prepared on the accelerometer files. Inspect this file with `head nhanes-commands.txt`. This file follows the same structure as the hello world example.
 
-- `ukb-short.txt` with the first 100 files for testing
-- `ukb-full.txt` with all 103k files (this one will be made available in the first week of the data challenge)
-
-You should have already copied `ukb-short.txt` to the tutorial folder in the previous part. Inspect this file with `head ukb-short.txt`. This file follows the same structure as the hello world example.
-
-**Test your model first on `ukb-short`.** You still need to create the submission script yourself. This time also pass the name of your conda environment `wearables-workshop` (change this accordingly) and add a new `--batch` parameter:
+<!-- **Test your model first on `ukb-short`.** You still need to create the submission script yourself. This time also pass the name of your conda environment `wearables-workshop` (change this accordingly) and add a new `--batch` parameter:
 
 ```bash
 python write-BMRC-script.py ukb-short.txt --batch 2 --conda wearables-workshop 
 
 # BMRC sbatch script written to: ukb-short.sh
+``` -->
+
+You create your submission script:
+
+```bash
+python write-BMRC-script.py nhanes-commands.txt
+
+# BMRC sbatch script written to: nhanes-commands.sh
 ```
 
-In the hello world example, each command was executed in 1 task. For UKB deployment, it's better to execute multiple commands per task. This improves efficiency of the job by spending less time waiting for a free slot. Submit your job with `sbatch ukb-short.sh`. Follow the progress with `sq`. You should see 50 tasks (because every task processes 2 files).
+<!-- In the hello world example, each command was executed in 1 task. For UKB deployment, it's better to execute multiple commands per task. This improves efficiency of the job by spending less time waiting for a free slot.  -->
 
-Reminder: `template.py` (with your model), `ukb-short.txt` and `ukb-short.sh` should all exist in the same folder, and that should be your current directory when submitting the job.
+Finally, submit your job with `sbatch nhanes-commands.sh`. 
 
-### Participant selection
+(if you have a reservation code, use `sbatch --reservation=<reservation_code> nhanes-commands.sh`).
+
+Follow the progress with `squeue -u <username>`.
+<!-- You should see 50 tasks (because every task processes 2 files). -->
+
+Reminder: `template.py` (with your model) and `nhanes-commands.txt` should exist in the same folder, and that should be your current directory when submitting the job.
+
+<!-- ### Participant selection
 
 After confirming your model works on `ukb-short.txt`, we can generate the final script to run it on the whole dataset. If you know beforehand that only a subset will have the medical outcome data that you're analysing, we can do one more filtering step to deploy the model only on this cohort. This is optional - if you're unsure of your cohort at the time of submission, you can use `ukb-full.txt`. But doing the participant selection will speed up the computation.
 
@@ -252,4 +271,4 @@ python merge_summary.py ./output
 # summary saved to ./output/summary.csv
 ```
 
-You can then use the aggregated `summary.csv` file for your epi analysis.
+You can then use the aggregated `summary.csv` file for your epi analysis. -->
