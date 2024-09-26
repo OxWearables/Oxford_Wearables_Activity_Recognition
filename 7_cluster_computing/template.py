@@ -107,20 +107,21 @@ if __name__ == '__main__':
     group = input_path.parent.stem if 'group' in input_path.parent.stem else None
 
     print(input_file)
-    print(group, pid)
+    # print(group, pid)
 
     np.random.seed(42)
     torch.manual_seed(42)
 
     # load data
-    data, info = actipy.read_device(input_file,
-                                    lowpass_hz=None,
-                                    calibrate_gravity=True,
-                                    detect_nonwear=True,
-                                    resample_hz=SAMPLE_RATE)
-    print(data.head(1))
-    print(info)
-    info = pd.DataFrame(info, index=[0])
+    data = pd.read_csv(
+            input_file,
+            parse_dates=['time'],
+            index_col='time',
+            dtype={'x': 'f4', 'y': 'f4', 'z': 'f4'}
+        )
+
+    # print first 5 lines of the file
+    print(data.head(5))
 
     # store original start/end times for reindexing later
     data_start = data.index[0]
@@ -148,13 +149,16 @@ if __name__ == '__main__':
     # feature extraction
     X_feats = pd.DataFrame([extract_features(x) for x in X])
 
-    # Load sklearn model
-    # https://scikit-learn.org/stable/modules/model_persistence.html
-    random_forest = joblib.load('your_random_forest.joblib')
+    # # Load sklearn model
+    # # https://scikit-learn.org/stable/modules/model_persistence.html
+    # random_forest = joblib.load('your_random_forest.joblib')
 
-    # do your prediction work here.
-    # y_pred should be a 1D vector shape (num_windows,), containing the predicted labels
-    y_pred = random_forest.predict(X_feats)
+    # # do your prediction work here.
+    # # y_pred should be a 1D vector shape (num_windows,), containing the predicted labels
+    # y_pred = random_forest.predict(X_feats)
+
+    # this is just an example: random binary predictions
+    y_pred = np.random.randint(2, size=len(X_feats))
 
     # construct a dataframe with time as the index and the labels in the 'prediction' column
     df_pred = pd.DataFrame({
@@ -166,8 +170,8 @@ if __name__ == '__main__':
     # These values were taken out of X (and T) by df_to_windows (because we can't classify NaN values).
     # df_pred will therefore contain gaps in the time index where the non-wear was.
     # Reindexing fills up these gaps with NaN values and create a uniform continuous time index from start to end.
-    newindex = pd.date_range(data_start, data_end, freq='{s}S'.format(s=WINDOW_SEC))
-    df_pred = df_pred.reindex(newindex, method='nearest', fill_value=np.nan, tolerance='5S')
+    newindex = pd.date_range(data_start, data_end, freq='{s}s'.format(s=WINDOW_SEC))
+    df_pred = df_pred.reindex(newindex, method='nearest', fill_value=np.nan, tolerance='5s')
 
     # do your phenotype / summary statistics work on the predicted time series here
     # (you could also do it before reindexing, it depends on how you will handle missing values in the predicted series)
@@ -176,10 +180,10 @@ if __name__ == '__main__':
 
     summary = pd.DataFrame({
         'eid': pid,
-        'StartTime': info['StartTime'],
-        'EndTime': info['EndTime'],
-        'WearTime(days)': info['WearTime(days)'],
-        'CalibrationOK': info['CalibOK']
+        # 'StartTime': info['StartTime'],
+        # 'EndTime': info['EndTime'],
+        # 'WearTime(days)': info['WearTime(days)'],
+        # 'CalibrationOK': info['CalibOK']
     }, index=[0])
 
     summary['my_sleep_phenotype'] = 0.5  # just an example, do actual phenotyping on the predicted time series
