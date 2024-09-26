@@ -2,20 +2,20 @@
 Perform inference with pretrained model on a UKB accelerometer file.
 
 Arguments:
-    Input file, in the format .cwa.gz
+    Input accelerometer file. If CSV, it must have columns 'time', 'x', 'y', 'z'.
 
 Example usage:
-    python template.py sample.cwa.gz
+    python template.py sample.csv.gz
 
 Output:
-    Prediction DataFrame in {eid}.csv format, stored in OUTPUT_PATH
-    If the input file is stored in a groupX folder, output will be in OUTPUT_PATH/groupX/
-    A {eid}_summary.csv file with the calculated phenotype: 1 row, an 'eid' column followed by the phenotype column(s)
+    Prediction DataFrame in {eid}_prediction.csv format, stored in outputs/ folder.
+    A {eid}_summary.json file with the calculated summary phenotypes and statistics.
 """
 
 import actipy
 import argparse
 import os
+import json
 import torch
 import joblib
 import pandas as pd
@@ -30,10 +30,6 @@ WINDOW_OVERLAP_SEC = 0  # seconds
 WINDOW_LEN = int(SAMPLE_RATE * WINDOW_SEC)  # device ticks
 WINDOW_OVERLAP_LEN = int(SAMPLE_RATE * WINDOW_OVERLAP_SEC)  # device ticks
 WINDOW_STEP_LEN = WINDOW_LEN - WINDOW_OVERLAP_LEN  # device ticks
-
-start_time = datetime.now()
-
-OUTPUT_PATH = './output'
 
 
 def vectorized_stride_v2(acc, time, window_size, stride_size):
@@ -91,34 +87,51 @@ def extract_features(xyz):
     v = np.linalg.norm(xyz, axis=1)  # magnitude stream
     feats['mean'], feats['std'] = np.mean(v), np.std(v)
 
+    # add more of your own features here
+    # feats['...'] = ...
+
     return feats
 
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if pd.isnull(obj):  # handles pandas NAType
+            return np.nan
+        return json.JSONEncoder.default(self, obj)
+
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='SSL UKB', usage='Apply the model on a UKB cwa file.')
-    parser.add_argument('input_file', type=str, help='input cwa file')
+    parser = argparse.ArgumentParser(prog='My App', usage='Apply the model on an accelerometer file.')
+    parser.add_argument('input_file', type=str, help='input file path')
+    parser.add_argument('--output_dir', '-o', type=str, default='outputs/', help='output directory path')
     args = parser.parse_args()
 
-    input_file = args.input_file
-    input_path = Path(input_file)
+    before = datetime.now()
 
-    # get person id (pid) and group from input string
-    pid = input_path.stem.split('_')[0]
-    group = input_path.parent.stem if 'group' in input_path.parent.stem else None
-
-    print(input_file)
-    # print(group, pid)
-
+    # set random seed for reproducibility
     np.random.seed(42)
     torch.manual_seed(42)
 
-    # load data
+    print(f"Input file: {args.input_file}")
+    input_file = Path(args.input_file)
+
+    # just file name without path and extensions
+    bname = input_file.name.split('.')[0]
+
+    # load the file (it must have headers 'time', 'x', 'y', 'z')
     data = pd.read_csv(
-            input_file,
-            parse_dates=['time'],
-            index_col='time',
-            dtype={'x': 'f4', 'y': 'f4', 'z': 'f4'}
-        )
+        input_file,
+        parse_dates=['time'],
+        index_col='time',
+        dtype={'x': 'f4', 'y': 'f4', 'z': 'f4'}
+    )
 
     # print first 5 lines of the file
     print(data.head(5))
@@ -173,37 +186,30 @@ if __name__ == '__main__':
     newindex = pd.date_range(data_start, data_end, freq='{s}s'.format(s=WINDOW_SEC))
     df_pred = df_pred.reindex(newindex, method='nearest', fill_value=np.nan, tolerance='5s')
 
-    # do your phenotype / summary statistics work on the predicted time series here
-    # (you could also do it before reindexing, it depends on how you will handle missing values in the predicted series)
-    # add your phenotypes as a column to the 'summary' dataframe (keep the existing columns like 'eid' and 'weartime')
-    # Your new phenotypes should be scalar values, add each one as a separate column ('summary' should only have 1 row)
+    # do your phenotype / summary statistics work on the predicted time series
+    # here (you could also do it before reindexing, it depends on how you will
+    # handle missing values in the predicted series) add your phenotypes as a
+    # column to the 'summary' dataframe 
+    summary = {
+        'Filename': str(input_file),
+        'StartTime': data_start.strftime("%Y-%m-%d %H:%M:%S"),
+        'EndTime': data_end.strftime("%Y-%m-%d %H:%M:%S"),
+        'TotalTime(days)': (data_end - data_start).total_seconds() / 86400,
+    }
 
-    summary = pd.DataFrame({
-        'eid': pid,
-        # 'StartTime': info['StartTime'],
-        # 'EndTime': info['EndTime'],
-        # 'WearTime(days)': info['WearTime(days)'],
-        # 'CalibrationOK': info['CalibOK']
-    }, index=[0])
+    # pretty print summary
+    print("\nSummary:")
+    for k, v in summary.items():
+        print(f'{k}: {v}')
 
-    summary['my_sleep_phenotype'] = 0.5  # just an example, do actual phenotyping on the predicted time series
+    # save results to disk
+    print('\nSaving to disk...')
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    df_pred.to_csv(output_dir / f'{bname}_prediction.csv', index_label='time')
+    with open(output_dir / f'{bname}_summary.json', 'w') as f:
+        json.dump(summary, f, indent=4, cls=NpEncoder)
 
-    ###########################################################
-    # don't edit below this line.
-    # REMINDER: make sure your df_pred and summary dataframes are in the same format as given by the template!
-    ###########################################################
-    print('Done')
-    # save dataframes to disk (for later inspection)
-    print('Saving dataframe')
-
-    if group:
-        path = os.path.join(OUTPUT_PATH, group)
-    else:
-        path = OUTPUT_PATH
-
-    Path(path).mkdir(parents=True, exist_ok=True)
-    df_pred.to_csv(os.path.join(path, pid + '.csv'), index_label='timestamp')
-    summary.to_csv(os.path.join(path, pid + '_summary.csv'), index=False)
-
-    end_time = datetime.now()
-    print(f'Duration: {end_time - start_time}')
+    after = datetime.now()
+    print('Done!')
+    print(f'Duration: {after - before}')
