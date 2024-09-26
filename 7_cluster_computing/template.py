@@ -12,17 +12,17 @@ Output:
     A {eid}_summary.json file with the calculated summary phenotypes and statistics.
 """
 
-import actipy
 import argparse
 import os
+import time
 import json
-import torch
-import joblib
-import pandas as pd
-import numpy as np
-
 from pathlib import Path
-from datetime import datetime
+import numpy as np
+import pandas as pd
+import joblib
+import torch
+
+import actipy
 
 SAMPLE_RATE = 30  # Hz
 WINDOW_SEC = 30  # seconds
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', '-o', type=str, default='outputs/', help='output directory path')
     args = parser.parse_args()
 
-    before = datetime.now()
+    before = time.perf_counter()
 
     # set random seed for reproducibility
     np.random.seed(42)
@@ -210,6 +210,6 @@ if __name__ == '__main__':
     with open(output_dir / f'{bname}_summary.json', 'w') as f:
         json.dump(summary, f, indent=4, cls=NpEncoder)
 
-    after = datetime.now()
+    after = time.perf_counter()
     print('Done!')
-    print(f'Duration: {after - before}')
+    print(f'Took {after - before:.2f} seconds')
