@@ -261,6 +261,7 @@ class WalkDetectorRF:
             sampling_strategy=clf_params.get('sampling_strategy', 'not minority'),
             random_state=clf_params.get('random_state', 42),
             verbose=0, n_jobs=1,
+            bootstrap=False,
         )
 
         self.hmms = hmm_utils.HMMSmoother(**hmm_params)
@@ -529,7 +530,7 @@ def get_cv_scores(yt, yp, cv_test_idxs, sample_weight=None, scorer_type='classif
 
     regress_scorers = {
         'mae': lambda yt, yp, sample_weight: metrics.mean_absolute_error(yt, yp, sample_weight=sample_weight),
-        'rmse': lambda yt, yp, sample_weight: metrics.mean_squared_error(yt, yp, sample_weight=sample_weight, squared=False),
+        'rmse': lambda yt, yp, sample_weight: metrics.root_mean_squared_error(yt, yp, sample_weight=sample_weight),
         'mape': lambda yt, yp, sample_weight: smooth_mean_absolute_percentage_error(yt, yp, sample_weight=sample_weight),
     }
 
