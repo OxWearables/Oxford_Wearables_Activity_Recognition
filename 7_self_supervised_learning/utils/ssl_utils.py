@@ -1,33 +1,7 @@
-"""
-Teaching template for SSL on wearable (accelerometer) windows.
-
-Design goals:
-- Students only edit:
-  - augmentations in `Augmenter`
-  - dataset return values (labels / pairs)
-  - the inner loss functions (Aug-Rec CE; NT-Xent)
-- Standard backbone + small heads; same training loop style for both tasks
-- Minimal dependency footprint; NO Lightning
-
-Structure (single file for teaching; can be split later):
-- Config
-- Augmentations
-- Datasets: BaseWearableDataset, AugRecDataset, ContrastiveDataset
-- Models: Backbone1D, ProjectionHead, AugRecHead, DownstreamHead
-- SSL losses: augrec_bce_with_logits, nt_xent_loss
-- Trainer: generic loop + EarlyStopping
-- Finetune + Eval on CAPTURE24
-
-Notes:
-- Marked TODOs are student-facing. Keep them small & local.
-- Use CPU by default; CUDA picked up if available.
-"""
-
 from __future__ import annotations
 from tqdm import tqdm
 import os
 import shutil, zipfile, urllib.request
-import math
 import random
 from dataclasses import dataclass, fields
 from tqdm import tqdm
@@ -43,6 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 from scipy.interpolate import interp1d
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import precision_recall_fscore_support, f1_score, accuracy_score
 
 # -------------------------
 # Seed
@@ -540,45 +515,7 @@ class SSLNet(nn.Module):
         raise ValueError(f"Unknown head '{head}'")
 
 # -------------------------
-# SSL losses (student focus)
-# -------------------------
-
-def augrec_bce_with_logits(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """Multi-label BCE loss for augmentation recognition.
-    logits: (B, K), targets: (B, K) in {0,1}
-    TODO(student): consider pos_weight to handle label imbalance.
-    """
-    return F.binary_cross_entropy_with_logits(logits, targets)
-
-
-def nt_xent_loss(z_i: torch.Tensor, z_j: torch.Tensor, temperature: float) -> torch.Tensor:
-    """Normalized temperature-scaled cross entropy (SimCLR-style).
-    z_i, z_j: (B, D) L2-normalized embeddings.
-    Returns mean loss over positives.
-    """
-    B, D = z_i.size()
-    z = torch.cat([z_i, z_j], dim=0)           # (2B, D)
-    sim = torch.mm(z, z.t())                   # cosine sim via dot product (since normalized)
-
-    # mask out self-similarity
-    mask = torch.eye(2*B, device=z.device).bool()
-    sim.masked_fill_(mask, -9e15)
-
-    # positive pairs indices: i<->i+B and i+B<->i
-    pos = torch.cat([
-        torch.arange(B, 2*B, device=z.device),
-        torch.arange(0, B, device=z.device)
-    ])
-    positives = sim[torch.arange(2*B, device=z.device), pos]
-
-    logits = sim / temperature
-    labels = pos  # target index of the positive among 2B-1 negatives
-
-    loss = F.cross_entropy(logits, labels)
-    return loss
-
-# -------------------------
-# Trainer
+# Augmentation recognition training
 # -------------------------
 
 @dataclass
@@ -586,320 +523,196 @@ class TrainConfig:
     seed: int = 42
     batch_size: int = 8
     num_workers: int = 2
+    max_epochs: int = 3
     lr: float = 1e-3
     weight_decay: float = 1e-4
-    max_epochs: int = 4
-    patience: int = 3
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
+def augrec_pretraining(
+    model: nn.Module,
+    train_dl: DataLoader,
+    val_dl: DataLoader,
+    device: str = "cpu",
+    lr: float = 1e-3,
+    weight_decay: float = 1e-4,
+    max_epochs: int = 20,
+) -> Dict[str, List[float]]:
+    """
+    Simple augmentation-recognition training loop.
 
-class EarlyStopping:
-    def __init__(self, patience=5):
-        self.best = float("inf")
-        self.count = 0
-        self.patience = patience
+    Args:
+        model: nn.Module with an augmentation head (called with head="aug")
+        train_dl: DataLoader yielding (x, y) batches for training
+        val_dl: DataLoader yielding (x, y) batches for validation
+        device: device string ("cpu" or "cuda")
+        lr: learning rate
+        weight_decay: weight decay for Adam optimizer
+        max_epochs: number of epochs to train
 
-    def step(self, val_loss):
-        improved = val_loss < self.best - 1e-6
-        if improved:
-            self.best = val_loss
-            self.count = 0
-        else:
-            self.count += 1
-        return improved, self.count >= self.patience
+    Returns:
+        history: dictionary with lists of per-epoch train and val loss
+    """
+    model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
 
-# --- Metrics helper for finetune ---
-def _compute_cls_metrics(y_true: np.ndarray,
-                         y_pred: np.ndarray,
-                         num_classes: int,
-                         label_names: List[str] | None = None) -> Dict[str, Any]:
-    from sklearn.metrics import precision_recall_fscore_support, f1_score, accuracy_score
+    for epoch in range(max_epochs):
+        # ---- training ----
+        model.train()
+        train_loss_sum, n = 0.0, 0
+        for x, y in tqdm(train_dl):
+            x, y = x.to(device), y.to(device)
+            logits = model(x, head="aug")
+            loss = F.binary_cross_entropy_with_logits(logits, y)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            train_loss_sum += loss.item() * x.size(0)
+            n += x.size(0)
+        train_loss = train_loss_sum / max(1, n)
 
-    # per-class
-    prec, rec, f1, support = precision_recall_fscore_support(
-        y_true, y_pred, labels=list(range(num_classes)), zero_division=0
-    )
-    # aggregates
-    metrics = {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "f1_macro": f1_score(y_true, y_pred, average="macro", zero_division=0),
-        "f1_weighted": f1_score(y_true, y_pred, average="weighted", zero_division=0),
-        "per_class": []
-    }
-    for k in range(num_classes):
-        name = label_names[k] if (label_names and k < len(label_names)) else str(k)
-        metrics["per_class"].append({
-            "class": name,
-            "precision": float(prec[k]),
-            "recall": float(rec[k]),
-            "f1": float(f1[k]),
-            "support": int(support[k]),
-        })
-    return metrics
-
-# --- Losses (as you had) ---
-def augrec_bce_with_logits(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    return F.binary_cross_entropy_with_logits(logits, targets)
-
-def nt_xent_loss(z_i: torch.Tensor, z_j: torch.Tensor, temperature: float) -> torch.Tensor:
-    B, D = z_i.size()
-    z = torch.cat([z_i, z_j], dim=0)           # (2B, D)
-    sim = torch.mm(z, z.t())
-    mask = torch.eye(2 * B, device=z.device, dtype=torch.bool)
-    sim = sim.masked_fill(mask, -9e15)
-    pos = torch.cat([torch.arange(B, 2 * B, device=z.device),
-                     torch.arange(0, B, device=z.device)])
-    logits = sim / temperature
-    labels = pos
-    return F.cross_entropy(logits, labels)
-
-# --- Trainer (records history + metrics) ---
-class Trainer:
-    def __init__(self, cfg: TrainConfig):
-        self.cfg = cfg
-        self.history: Dict[str, List[float]] = {}   # filled per run
-
-    def _optim(self, model: nn.Module, lr: float):
-        return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=self.cfg.weight_decay)
-
-    def fit_augrec(self, model, train_dl: DataLoader, val_dl: DataLoader) -> Dict[str, List[float]]:
-        device = self.cfg.device
-        model.to(device)
-        opt = self._optim(model, self.cfg.lr)
-        stopper = EarlyStopping(self.cfg.patience)
-        self.history = {"train_loss": [], "val_loss": []}
-
-        for epoch in range(self.cfg.max_epochs):
-            # --- train ---
-            model.train()
-            train_losses = []
-            pbar = tqdm(train_dl, desc=f"Epoch {epoch:03d} [train]", leave=False)
-            for x, y in pbar:
+        # ---- validation ----
+        model.eval()
+        val_loss_sum, n = 0.0, 0
+        with torch.inference_mode():
+            for x, y in tqdm(val_dl):
                 x, y = x.to(device), y.to(device)
                 logits = model(x, head="aug")
-                loss = augrec_bce_with_logits(logits, y)
-                opt.zero_grad(); loss.backward(); opt.step()
-                train_losses.append(loss.item())
-                # live update in bar
-                pbar.set_postfix(loss=f"{loss.item():.4f}")
+                loss = F.binary_cross_entropy_with_logits(logits, y)
+                val_loss_sum += loss.item() * x.size(0)
+                n += x.size(0)
+        val_loss = val_loss_sum / max(1, n)
 
-            # --- validation ---
-            model.eval()
-            vloss_sum, n = 0.0, 0
-            with torch.inference_mode():
-                for x, y in val_dl:
-                    x, y = x.to(device), y.to(device)
-                    logits = model(x, head="aug")
-                    vloss_sum += augrec_bce_with_logits(logits, y).item() * x.size(0)
-                    n += x.size(0)
-            vloss = vloss_sum / max(1, n)
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
 
-            tr = float(np.mean(train_losses)) if train_losses else float("nan")
-            self.history["train_loss"].append(tr)
-            self.history["val_loss"].append(vloss)
+        print(f"[AugRec] epoch {epoch:03d}  train {train_loss:.4f}  val {val_loss:.4f}")
 
-            improved, stop = stopper.step(vloss)
-            print(f"[AugRec] epoch {epoch:03d}  train {tr:.4f}  val {vloss:.4f}{' *' if improved else ''}")
-            
-            if stop:
-                break
+    return history
 
-        return self.history
 
-    def fit_contrastive(self, model, train_dl: DataLoader, val_dl: DataLoader) -> Dict[str, List[float]]:
-        device = self.cfg.device
-        model.to(device)
-        opt = self._optim(model, self.cfg.lr)
-        stopper = EarlyStopping(self.cfg.patience)
-        self.history = {"train_loss": [], "val_loss": []}
+# -------------------------
+# Supervised fine-tuning
+# -------------------------
 
-        for epoch in range(self.cfg.max_epochs):
-            # --- train ---
-            model.train()
-            train_losses = []
-            pbar = tqdm(train_dl, desc=f"Epoch {epoch:03d} [contrastive/train]", leave=False)
-            for xi, xj in pbar:
-                xi, xj = xi.to(device), xj.to(device)
-                zi, zj = model(xi, head="proj"), model(xj, head="proj")
-                loss = nt_xent_loss(zi, zj, self.cfg.temperature)
-                opt.zero_grad(); loss.backward(); opt.step()
-                train_losses.append(loss.item())
-                pbar.set_postfix(loss=f"{loss.item():.4f}")
+def supervised_finetuning(
+    model: nn.Module,
+    train_dl: DataLoader,
+    val_dl: DataLoader,
+    device: str = "cpu",
+    lr: float = 5e-4,
+    weight_decay: float = 1e-4,
+    max_epochs: int = 10,
+) -> Dict[str, List[float]]:
+    """
+    Supervised training loop (no freezing here). Tracks loss only.
+    Expects model(x, head='cls') -> logits [B, C]; y is Long [B].
+    """
+    model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    ce = nn.CrossEntropyLoss()
 
-            # --- validation ---
-            model.eval()
-            with torch.inference_mode():
-                vloss_sum, n = 0.0, 0
-                for xi, xj in val_dl:
-                    xi, xj = xi.to(device), xj.to(device)
-                    zi, zj = model(xi, head="proj"), model(xj, head="proj")
-                    vloss_sum += nt_xent_loss(zi, zj, self.cfg.temperature).item() * xi.size(0)
-                    n += xi.size(0)
-            vloss = vloss_sum / max(1, n)
+    history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
+    train_loss_sum, n = 0.0, 0
 
-            tr = float(np.mean(train_losses)) if train_losses else float("nan")
-            self.history["train_loss"].append(tr)
-            self.history["val_loss"].append(vloss)
+    for epoch in range(max_epochs):
+        # --- train ---
+        model.train()
+        train_loss_sum, n = 0.0, 0
+        for x, y in tqdm(train_dl):
+            x, y = x.to(device), y.to(device).long()
+            logits = model(x, head="cls")
+            loss = ce(logits, y)
+            opt.zero_grad(); loss.backward(); opt.step()
+            train_loss_sum += loss.item() * x.size(0)
+            n += x.size(0)
+        train_loss = train_loss_sum / max(1, n)
 
-            improved, stop = stopper.step(vloss)
-            print(f"[Contrastive] epoch {epoch:03d}  train {tr:.4f}  val {vloss:.4f}{' *' if improved else ''}")
-            if stop:
-                break
-
-        return self.history
-
-    def finetune(self, model, train_dl: DataLoader, val_dl: DataLoader,
-                label_names: List[str] | None = None) -> Dict[str, Any]:
-        device = self.cfg.device
-        model.to(device)
-
-        # freeze everything except classifier (toggle as desired)
-        for p in model.backbone.parameters(): p.requires_grad = False
-        for p in model.proj.parameters():     p.requires_grad = False
-        for p in model.aug_head.parameters(): p.requires_grad = False
-        for p in model.cls_head.parameters(): p.requires_grad = True
-
-        opt = self._optim(model, self.cfg.lr)
-        stopper = EarlyStopping(self.cfg.patience)
-        ce = nn.CrossEntropyLoss()
-
-        self.history = {"train_loss": [], "val_loss": []}
-        last_metrics: Dict[str, Any] = {}
-
-        for epoch in range(self.cfg.max_epochs):
-            # --- train ---
-            model.train()
-            train_losses = []
-            pbar = tqdm(train_dl, desc=f"Epoch {epoch:03d} [finetune/train]", leave=False)
-            for x, y in pbar:
+        # --- validate ---
+        model.eval()
+        val_loss_sum, n = 0.0, 0
+        with torch.inference_mode():
+            for x, y in tqdm(val_dl):
                 x, y = x.to(device), y.to(device).long()
                 logits = model(x, head="cls")
                 loss = ce(logits, y)
-                opt.zero_grad(); loss.backward(); opt.step()
-                train_losses.append(loss.item())
-                pbar.set_postfix(loss=f"{loss.item():.4f}")
-
-            # --- val + metrics ---
-            model.eval()
-            vloss_sum, n = 0.0, 0
-            all_true, all_pred = [], []
-            with torch.inference_mode():
-                for x, y in val_dl:
-                    x, y = x.to(device), y.to(device).long()
-                    logits = model(x, head="cls")
-                    vloss_sum += ce(logits, y).item() * x.size(0)
-                    n += x.size(0)
-                    preds = logits.argmax(dim=1)
-                    all_true.append(y.cpu().numpy())
-                    all_pred.append(preds.cpu().numpy())
-            vloss = vloss_sum / max(1, n)
-
-            tr = float(np.mean(train_losses)) if train_losses else float("nan")
-            self.history["train_loss"].append(tr)
-            self.history["val_loss"].append(vloss)
-
-            # metrics
-            if all_true:
-                y_true = np.concatenate(all_true)
-                y_pred = np.concatenate(all_pred)
-                last_metrics = _compute_cls_metrics(
-                    y_true, y_pred,
-                    num_classes=model.cls_head.fc.out_features,
-                    label_names=label_names
-                )
-                print(
-                    f"[Finetune] epoch {epoch:03d}  "
-                    f"train {tr:.4f}  val {vloss:.4f}  "
-                    f"F1(macro) {last_metrics['f1_macro']:.3f}  "
-                    f"F1(weighted) {last_metrics['f1_weighted']:.3f}"
-                )
-            else:
-                print(f"[Finetune] epoch {epoch:03d}  train {tr:.4f}  val {vloss:.4f}")
-
-            improved, stop = stopper.step(vloss)
-            if stop:
-                break
-
-        return {
-            "train_loss": self.history["train_loss"],
-            "val_loss": self.history["val_loss"],
-            "val_metrics": last_metrics,
-        }
-
-    def evaluate(self, model, test_dl: DataLoader, label_names: List[str] | None = None) -> Dict[str, Any]:
-        device = self.cfg.device
-        model.eval().to(device)
-        ce = nn.CrossEntropyLoss(reduction="sum")
-
-        loss_sum, n = 0.0, 0
-        all_true, all_pred = [], []
-        with torch.inference_mode():
-            for x, y in test_dl:
-                x, y = x.to(device), y.to(device).long()
-                logits = model(x, head="cls")
-                loss_sum += ce(logits, y).item()
+                val_loss_sum += loss.item() * x.size(0)
                 n += x.size(0)
-                preds = logits.argmax(dim=1)
-                all_true.append(y.cpu().numpy())
-                all_pred.append(preds.cpu().numpy())
+        val_loss = val_loss_sum / max(1, n)
 
-        avg_loss = loss_sum / max(1, n)
-        y_true = np.concatenate(all_true) if all_true else np.array([], dtype=int)
-        y_pred = np.concatenate(all_pred) if all_pred else np.array([], dtype=int)
-        metrics = _compute_cls_metrics(
-            y_true, y_pred, num_classes=model.cls_head.fc.out_features,
-            label_names=label_names
-        ) if y_true.size > 0 else {}
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        print(f"[Supervised] epoch {epoch:03d}  train {train_loss:.4f}  val {val_loss:.4f}")
 
-        print(f"[Test] loss {avg_loss:.4f}  "
-              f"F1(macro) {metrics.get('f1_macro', float('nan')):.3f}  "
-              f"F1(weighted) {metrics.get('f1_weighted', float('nan')):.3f}")
-
-        return {"loss": avg_loss, "metrics": metrics}
-
-
+    return history
 
 # -------------------------
-# Usage examples (leave commented in class; uncomment in the notebook)
+# Inference and evaluation
 # -------------------------
-if __name__ == "__main__":
-    pass
-    # cfg = Config()
-    # set_seed(cfg.seed)
-    # # --- Dummy data to sanity-check pipes ---
-    # N = 512
-    # X = np.random.randn(N, cfg.in_channels, cfg.input_len).astype("f4")
-    # y = np.random.randint(0, cfg.num_classes, size=(N,))
 
-    # # Aug-Rec pretraining
-    # aug_ds = AugRecDataset(X, augmenter=Augmenter())
-    # aug_train = DataLoader(aug_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers)
-    # aug_val = DataLoader(aug_ds, batch_size=cfg.batch_size, shuffle=False, num_workers=0)
+def evaluate(
+    model: nn.Module,
+    dl: DataLoader,
+    device: str = "cpu",
+    label_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Runs inference and returns accuracy, macro/weighted F1, and per-class PRF.
+    """
+    model.eval().to(device)
+    all_true, all_pred = [], []
+    ce = nn.CrossEntropyLoss(reduction="sum")
+    loss_sum, n = 0.0, 0
 
-    # model = SSLNet(cfg, k_labels=len(AugRecDataset.OPS))
-    # trainer = Trainer(cfg)
-    # trainer.fit_augrec(model, aug_train, aug_val)
+    with torch.inference_mode():
+        for x, y in dl:
+            x, y = x.to(device), y.to(device).long()
+            logits = model(x, head="cls")
+            loss_sum += ce(logits, y).item()
+            n += x.size(0)
+            preds = logits.argmax(dim=1)
+            all_true.append(y.cpu().numpy())
+            all_pred.append(preds.cpu().numpy())
 
-    # # Contrastive pretraining
-    # con_ds = ContrastiveDataset(X, augmenter=Augmenter())
-    # con_train = DataLoader(con_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers)
-    # con_val = DataLoader(con_ds, batch_size=cfg.batch_size, shuffle=False, num_workers=0)
+    avg_loss = loss_sum / max(1, n)
+    y_true = np.concatenate(all_true) if all_true else np.array([], dtype=int)
+    y_pred = np.concatenate(all_pred) if all_pred else np.array([], dtype=int)
 
-    # model2 = SSLNet(cfg, k_labels=len(AugRecDataset.OPS))
-    # trainer.fit_contrastive(model2, con_train, con_val)
+    if y_true.size == 0:
+        return {}
 
-    # # Finetune head on supervised labels (here: dummy)
-    # sup_ds_train = BaseWearableDataset(X[:400], y[:400], augmenter=None)
-    # sup_ds_val = BaseWearableDataset(X[400:], y[400:], augmenter=None)
+    # infer class count
+    num_classes = int(max(y_true.max(), y_pred.max()) + 1)
+    print(num_classes)
 
-    # # wrap to yield (x, y)
-    # class SupervisedDS(BaseWearableDataset):
-    #     def __getitem__(self, idx):
-    #         return self._get_x(idx), torch.tensor(self.y[idx]).long()
-
-    # train_dl = DataLoader(SupervisedDS(sup_ds_train.X, sup_ds_train.y), batch_size=cfg.batch_size, shuffle=True)
-    # val_dl = DataLoader(SupervisedDS(sup_ds_val.X, sup_ds_val.y), batch_size=cfg.batch_size)
-
-    # trainer.finetune(model2, train_dl, val_dl)
-    # trainer.evaluate(model2, val_dl)
-
+    prec, rec, f1, support = precision_recall_fscore_support(
+        y_true, y_pred, labels=list(range(num_classes)), zero_division=0
+    )
+    metrics = {
+        "loss": avg_loss,
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "f1_weighted": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
+        "per_class": [
+            {
+                "class": (label_names[k] if label_names is not None and k < len(label_names) else str(k)),
+                "precision": float(prec[k]),
+                "recall": float(rec[k]),
+                "f1": float(f1[k]),
+                "support": int(support[k]),
+            }
+            for k in range(num_classes)
+        ],
+    }
+    # Print summary of performance
+    print(f"[Eval] loss {avg_loss:.4f}  F1(macro) {metrics['f1_macro']:.3f}  F1(weighted) {metrics['f1_weighted']:.3f}")
+    header = f"{'Class':15s} {'Prec':>8s} {'Rec':>8s} {'F1':>8s} {'Support':>8s}"
+    print(header)
+    print("-" * len(header))
+    for row in metrics["per_class"]:
+        print(f"{row['class']:15s} "
+            f"{row['precision']:8.3f} "
+            f"{row['recall']:8.3f} "
+            f"{row['f1']:8.3f} "
+            f"{row['support']:8d}") 
+    return metrics
