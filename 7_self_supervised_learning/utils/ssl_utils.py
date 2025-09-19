@@ -396,7 +396,6 @@ class AugRecDataset(BaseWearableDataset):
         labels = torch.zeros(len(self.ops), dtype=torch.float32)
 
         # Go through the augementation operations and apply them based on their probabilities
-        # TODO: Potential student exercise
         for k, op in enumerate(self.ops):
             p = self._op_probs[op]
             if random.random() < p:
@@ -407,8 +406,9 @@ class AugRecDataset(BaseWearableDataset):
 
 class ContrastiveDataset(BaseWearableDataset):
     def __getitem__(self, idx):
-        x = self._get_x(idx)              # (C, L)
-        v1, v2 = self.aug.two_views(x)    # both (C, L)
+        x = self._get_x(idx)
+        v1 = self.aug.view(x)
+        v2 = self.aug.view(x)
         return v1, v2
 
 # -------------------------
