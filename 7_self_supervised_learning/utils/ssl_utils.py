@@ -382,9 +382,12 @@ class BaseWearableDataset(Dataset):
         return x, y
 
 class AugRecDataset(BaseWearableDataset):
-    def __init__(self, *args, multi_label: bool = True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.multi_label = multi_label
+    def __init__(
+        self, 
+        X: np.ndarray, 
+        augmenter: Augmenter, 
+    ):
+        super().__init__(X=X, y=None, augmenter=augmenter)
         self.ops = self.aug.available_ops()          # dynamic, ordered
         self._op_probs = self.aug.probs()            # dict for quick lookup
 
@@ -392,14 +395,13 @@ class AugRecDataset(BaseWearableDataset):
         x = self._get_x(idx)                         # (C, L)
         labels = torch.zeros(len(self.ops), dtype=torch.float32)
 
+        # Go through the augementation operations and apply them based on their probabilities
+        # TODO: Potential student exercise
         for k, op in enumerate(self.ops):
             p = self._op_probs[op]
             if random.random() < p:
                 labels[k] = 1.0
                 x = getattr(self.aug, op)(x)         # call op by name
-
-        if not self.multi_label:
-            labels = labels.max().unsqueeze(0)       # binary: any-aug
 
         return x, labels
 
