@@ -5,9 +5,9 @@ pandas
 matplotlib
 seaborn
 statsmodels
-scikit-learn
+scikit-learn==1.5.2
 joblib
-imbalanced-learn
+imbalanced-learn==0.12.4
 tqdm
 torch
 torchaudio
