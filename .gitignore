@@ -8,3 +8,7 @@ processed_data
 8_stepcount/OxWalk_Dec2022
 8_stepcount/*.pkl
 8_stepcount/*.npy
+.DS_Store
+.gitattributes
+7_self_supervised_learning/.DS_Store
+7_self_supervised_learning/contrastive_learning.ipynb
