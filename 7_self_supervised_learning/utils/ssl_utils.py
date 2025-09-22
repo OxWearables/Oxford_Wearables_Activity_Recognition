@@ -382,9 +382,12 @@ class BaseWearableDataset(Dataset):
         return x, y
 
 class AugRecDataset(BaseWearableDataset):
-    def __init__(self, *args, multi_label: bool = True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.multi_label = multi_label
+    def __init__(
+        self, 
+        X: np.ndarray, 
+        augmenter: Augmenter, 
+    ):
+        super().__init__(X=X, y=None, augmenter=augmenter)
         self.ops = self.aug.available_ops()          # dynamic, ordered
         self._op_probs = self.aug.probs()            # dict for quick lookup
 
@@ -392,21 +395,20 @@ class AugRecDataset(BaseWearableDataset):
         x = self._get_x(idx)                         # (C, L)
         labels = torch.zeros(len(self.ops), dtype=torch.float32)
 
+        # Go through the augementation operations and apply them based on their probabilities
         for k, op in enumerate(self.ops):
             p = self._op_probs[op]
             if random.random() < p:
                 labels[k] = 1.0
                 x = getattr(self.aug, op)(x)         # call op by name
 
-        if not self.multi_label:
-            labels = labels.max().unsqueeze(0)       # binary: any-aug
-
         return x, labels
 
 class ContrastiveDataset(BaseWearableDataset):
     def __getitem__(self, idx):
-        x = self._get_x(idx)              # (C, L)
-        v1, v2 = self.aug.two_views(x)    # both (C, L)
+        x = self._get_x(idx)
+        v1 = self.aug.view(x)
+        v2 = self.aug.view(x)
         return v1, v2
 
 # -------------------------
@@ -430,14 +432,10 @@ class ModelConfig:
     in_channels: int = 3
     input_len: int = 900
     proj_dim: int = 128
-    num_classes: int = 4
+    num_classes: int = 6 
     k_labels: int = 5
+    tau: float = 0.5 
     freeze_backbone: bool = False
-
-@dataclass
-class SSLConfig:
-    hub: HubConfig = HubConfig()
-    model: ModelConfig = ModelConfig()
 
 
 class ProjectionHead(nn.Module):
@@ -465,12 +463,13 @@ class SSLNet(nn.Module):
     Adapter that loads OxWearables backbone from torch.hub and exposes heads:
       forward(x, head={'proj','aug','cls','feats'})
     """
-    def __init__(self, cfg: SSLConfig):
+    def __init__(self, model_cfg: ModelConfig, hub_cfg: HubConfig = HubConfig()):
         super().__init__()
-        self.cfg = cfg  # keep a copy for reference/saving
+        self.model_cfg = model_cfg  # keep a copy for reference/saving
+        self.hub_cfg = hub_cfg  # keep a copy for reference/saving
 
         # 1) load hub model, pinned to commit if provided
-        h = cfg.hub
+        h = hub_cfg
         hub_kwargs = dict(trust_repo=h.trust_repo, class_num=h.class_num, pretrained=h.pretrained, weights_only=h.weights_only)
         if h.commit is not None:
             self.hub_model: nn.Module = torch.hub.load(h.repo, h.entry, **hub_kwargs,
@@ -483,7 +482,7 @@ class SSLNet(nn.Module):
         self.backbone: nn.Module = self.hub_model.feature_extractor
 
         # 2) infer feature dim from a dummy pass (no magic numbers)
-        m = cfg.model
+        m = model_cfg
         with torch.no_grad():
             dummy = torch.zeros(1, m.in_channels, m.input_len)
             h = self.encode(dummy)
@@ -497,6 +496,9 @@ class SSLNet(nn.Module):
         if m.freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
+
+        # 4) save temperature for CL
+        self.tau = m.tau
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         feats = self.backbone(x)        # (B, Cb, L')
