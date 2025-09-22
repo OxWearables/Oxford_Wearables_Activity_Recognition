@@ -19,6 +19,52 @@ from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import precision_recall_fscore_support, f1_score, accuracy_score
 
+
+# -------------------------
+# Augmentations 
+# -------------------------
+
+@dataclass
+class AugmentConfig:
+    jitter: float = 0.5
+    scaling: float = 0.5
+    time_flip: float = 0.5
+    axis_swap: float = 0.2
+    time_mask: float = 0.3
+
+
+@dataclass
+class HubConfig:
+    repo: str = "OxWearables/ssl-wearables"
+    entry: str = "harnet30"
+    class_num: int = 6
+    pretrained: bool = True
+    commit: str | None = "150550ea5d41800229c95e36f88f5bf0d2e7cf04"
+    trust_repo: bool = True
+    weights_only: bool = False
+    force_reload: bool = False
+    skip_validation: bool = True  # avoids import-time validation
+
+@dataclass
+class ModelConfig:
+    in_channels: int = 3
+    input_len: int = 900
+    proj_dim: int = 128
+    num_classes: int = 6 
+    k_labels: int = 5
+    tau: float = 0.5 
+    freeze_backbone: bool = False
+
+@dataclass
+class TrainConfig:
+    seed: int = 42
+    batch_size: int = 8
+    num_workers: int = 2
+    max_epochs: int = 3
+    lr: float = 1e-3
+    weight_decay: float = 1e-4
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+
 # -------------------------
 # Seed
 # -------------------------
@@ -28,7 +74,6 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
 
 # -------------------------
 #  Data IO: symlink-from-/srv OR download locally, then load & split
@@ -201,14 +246,6 @@ class Capture24DataManager:
 # -------------------------
 # Augmentations - appears in the notebook!
 # -------------------------
-@dataclass
-class AugmentConfig:
-    jitter: float = 0.5
-    scaling: float = 0.5
-    time_flip: float = 0.5
-    axis_swap: float = 0.2
-    time_mask: float = 0.3
-
 
 class Augmenter:
     """
@@ -415,27 +452,6 @@ class ContrastiveDataset(BaseWearableDataset):
 # Models
 # -------------------------
 
-@dataclass
-class HubConfig:
-    repo: str = "OxWearables/ssl-wearables"
-    entry: str = "harnet30"
-    class_num: int = 6
-    pretrained: bool = True
-    commit: str | None = "150550ea5d41800229c95e36f88f5bf0d2e7cf04"
-    trust_repo: bool = True
-    weights_only: bool = False
-    force_reload: bool = False
-    skip_validation: bool = True  # avoids import-time validation
-
-@dataclass
-class ModelConfig:
-    in_channels: int = 3
-    input_len: int = 900
-    proj_dim: int = 128
-    num_classes: int = 6 
-    k_labels: int = 5
-    tau: float = 0.5 
-    freeze_backbone: bool = False
 
 
 class ProjectionHead(nn.Module):
@@ -520,15 +536,23 @@ class SSLNet(nn.Module):
 # Augmentation recognition training
 # -------------------------
 
-@dataclass
-class TrainConfig:
-    seed: int = 42
-    batch_size: int = 8
-    num_workers: int = 2
-    max_epochs: int = 3
-    lr: float = 1e-3
-    weight_decay: float = 1e-4
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+def overfit_one_batch_augrec(model, dl, steps=100, lr=1e-2, device="cpu"):
+    model.train().to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    b = next(iter(dl))
+    x, y = b[0].to(device), b[1].to(device)
+
+    print(f"[Overfit-check] batch shape: x={tuple(x.shape)}, y={tuple(y.shape)}")
+    losses = []
+    for t in tqdm(range(steps)):
+        # =========== This defines the logic for augmentation 
+        logits = model(x, head="aug")
+        # TODO: Potential student exercise, implement the loss function 
+        loss = F.binary_cross_entropy_with_logits(logits, y)
+        opt.zero_grad(); loss.backward(); opt.step()
+        losses.append(loss.item())
+    print(f" start loss={losses[0]:.4f}  end loss={losses[-1]:.4f}")
+    return losses
 
 def augrec_pretraining(
     model: nn.Module,
@@ -718,3 +742,131 @@ def evaluate(
             f"{row['f1']:8.3f} "
             f"{row['support']:8d}") 
     return metrics
+
+# -------------------------
+# Contrastive learning pretraining 
+# -------------------------
+
+# A new sanity check function for the contrastive task.
+def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, tau: float):
+    """
+    Normalised, temperature-scale cross-entropy loss.
+    """
+    assert z1.shape == z2.shape and z1.dim() == 2
+    B, _ = z1.shape
+
+    # normalise each vector for cosine similarity
+    z1 = F.normalize(z1, dim=1)
+    z2 = F.normalize(z2, dim=1)
+
+    # combine the augmented and unaugmented views
+    z = torch.cat([z1, z2], dim=0) # (0, B-1) are z1, (B-2B-1) are z2
+    sim = z @ z.T # (2B, 2B)
+    logits = sim / tau
+
+    # mask out self-similarity by setting diagonal to -inf
+    diag_mask = torch.eye(2*B, dtype=torch.bool, device=logits.device)
+    logits = logits.masked_fill(diag_mask, float('-inf'))
+    
+    # compute the log-softmax over candidates
+    log_prob = F.log_softmax(logits, dim=1)
+
+    # build indices of positive candidates for each anchor (0->B, 1->B+1, ..., B-1->2B-1, B->0, B+1->1, ..., 2B-1, B-1)
+    ancs = torch.arange(2*B, device=logits.device)
+    pos_idx = (ancs + B) % (2*B)
+
+    # compute the negative log likelihood of the positive candidates conditional on each anchor
+    loss = - log_prob[ancs, pos_idx].mean()
+
+    return loss
+
+def overfit_one_batch_contrastive(model, dl, steps=100, lr=1e-3, device="cpu"):
+    model.train().to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    v1, v2 = next(iter(dl))
+    v1, v2 = v1.to(device), v2.to(device)
+
+    print(f"[Overfit-check] batch shape: v1={tuple(v1.shape)}, v2={tuple(v2.shape)}")
+    losses = []
+
+    for t in tqdm(range(steps)):
+        z1 = model(v1, head="proj") # (B, C)
+        z2 = model(v2, head="proj") # (B, C)
+        
+        #TODO: Implement normalised, temp-scaled cross-entropy loss
+        loss = nt_xent_loss(z1, z2, model.tau)
+
+        opt.zero_grad(); loss.backward(); opt.step()
+        losses.append(loss.item())
+
+    print(f" start loss={losses[0]:.4f}  end loss={losses[-1]:.4f}")
+    return losses
+
+def contrastive_pretraining(
+    model: nn.Module,
+    train_dl: DataLoader,          # yields (v1, v2)
+    val_dl: DataLoader,            # yields (v1, v2)
+    device: str = "cpu",
+    lr: float = 1e-3,
+    weight_decay: float = 1e-4,
+    max_epochs: int = 20,
+    grad_clip: float = 0.0,        # 0 = off
+) -> Dict[str, List[float]]:
+    """
+    Simple NT-Xent contrastive pretraining loop.
+
+    Assumptions:
+      - DataLoaders yield two augmented views: (v1, v2)
+      - model(x, head="proj") returns projection vectors [B, C]
+      - model.tau is the temperature (float)
+
+    Returns:
+      history: {"train_loss": [...], "val_loss": [...]}
+    """
+    model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    history: Dict[str, List[float]] = {"train_loss": [], "val_loss": []}
+
+    for epoch in range(max_epochs):
+        # ---- training ----
+        model.train()
+        train_loss_sum, n = 0.0, 0
+
+        for v1, v2 in tqdm(train_dl, desc=f"Train {epoch:03d}"):
+            v1, v2 = v1.to(device, non_blocking=True), v2.to(device, non_blocking=True)
+
+            z1 = model(v1, head="proj")   # (B, C)
+            z2 = model(v2, head="proj")   # (B, C)
+
+            loss = nt_xent_loss(z1, z2, float(model.tau))
+            train_loss_sum += loss.item() * v1.size(0)
+            n += v1.size(0)
+
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            if grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            opt.step()
+
+        train_loss = train_loss_sum / max(1, n)
+
+        # ---- validation ----
+        model.eval()
+        val_loss_sum, n = 0.0, 0
+        with torch.inference_mode():
+            for v1, v2 in tqdm(val_dl, desc=f" Val  {epoch:03d}"):
+                v1, v2 = v1.to(device, non_blocking=True), v2.to(device, non_blocking=True)
+                z1 = model(v1, head="proj")
+                z2 = model(v2, head="proj")
+                loss = nt_xent_loss(z1, z2, float(model.tau))
+                val_loss_sum += loss.item() * v1.size(0)
+                n += v1.size(0)
+        val_loss = val_loss_sum / max(1, n)
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
+        print(f"[CL] epoch {epoch:03d}  train {train_loss:.4f}  val {val_loss:.4f}  tau={float(model.tau):.3f}")
+
+    return history
