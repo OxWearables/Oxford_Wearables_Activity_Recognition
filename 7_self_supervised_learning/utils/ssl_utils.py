@@ -432,14 +432,10 @@ class ModelConfig:
     in_channels: int = 3
     input_len: int = 900
     proj_dim: int = 128
-    num_classes: int = 4
+    num_classes: int = 6 
     k_labels: int = 5
+    tau: float = 0.5 
     freeze_backbone: bool = False
-
-@dataclass
-class SSLConfig:
-    hub: HubConfig = HubConfig()
-    model: ModelConfig = ModelConfig()
 
 
 class ProjectionHead(nn.Module):
@@ -467,12 +463,13 @@ class SSLNet(nn.Module):
     Adapter that loads OxWearables backbone from torch.hub and exposes heads:
       forward(x, head={'proj','aug','cls','feats'})
     """
-    def __init__(self, cfg: SSLConfig):
+    def __init__(self, model_cfg: ModelConfig, hub_cfg: HubConfig = HubConfig()):
         super().__init__()
-        self.cfg = cfg  # keep a copy for reference/saving
+        self.model_cfg = model_cfg  # keep a copy for reference/saving
+        self.hub_cfg = hub_cfg  # keep a copy for reference/saving
 
         # 1) load hub model, pinned to commit if provided
-        h = cfg.hub
+        h = hub_cfg
         hub_kwargs = dict(trust_repo=h.trust_repo, class_num=h.class_num, pretrained=h.pretrained, weights_only=h.weights_only)
         if h.commit is not None:
             self.hub_model: nn.Module = torch.hub.load(h.repo, h.entry, **hub_kwargs,
@@ -485,7 +482,7 @@ class SSLNet(nn.Module):
         self.backbone: nn.Module = self.hub_model.feature_extractor
 
         # 2) infer feature dim from a dummy pass (no magic numbers)
-        m = cfg.model
+        m = model_cfg
         with torch.no_grad():
             dummy = torch.zeros(1, m.in_channels, m.input_len)
             h = self.encode(dummy)
@@ -499,6 +496,9 @@ class SSLNet(nn.Module):
         if m.freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
+
+        # 4) save temperature for CL
+        self.tau = m.tau
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         feats = self.backbone(x)        # (B, Cb, L')
