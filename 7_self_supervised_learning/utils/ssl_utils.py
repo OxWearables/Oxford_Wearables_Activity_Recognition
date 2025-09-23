@@ -536,6 +536,25 @@ class SSLNet(nn.Module):
 # Augmentation recognition training
 # -------------------------
 
+def bce_loss(logits: torch.Tensor, y: torch.Tensor):
+    """
+    Computes binary cross-entropy loss from raw logits for multi-label classification.
+    """
+
+    # Check that input logits and target labels have the same shape
+    assert logits.shape == y.shape
+    # Apply sigmoid to logits to convert them to probabilities (p)
+    preds = torch.sigmoid(logits)
+    # Add a small value (epsilon) for numerical stability to avoid log(0)
+    epsilon = 1e-7
+   
+    # Calculate binary cross-entropy loss term by term
+    # This is based on the formula: L = -[y * log(p) + (1 - y) * log(1 - p)]
+    loss = -(y * torch.log(preds + epsilon) + (1 - y) * torch.log(1 - preds + epsilon))
+
+    # Return the mean loss across all elements in the batch
+    return torch.mean(loss)
+
 def overfit_one_batch_augrec(model, dl, steps=100, lr=1e-2, device="cpu"):
     model.train().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -547,8 +566,7 @@ def overfit_one_batch_augrec(model, dl, steps=100, lr=1e-2, device="cpu"):
     for t in tqdm(range(steps)):
         # =========== This defines the logic for augmentation 
         logits = model(x, head="aug")
-        # TODO: Potential student exercise, implement the loss function 
-        loss = F.binary_cross_entropy_with_logits(logits, y)
+        loss = bce_loss(logits, y)
         opt.zero_grad(); loss.backward(); opt.step()
         losses.append(loss.item())
     print(f" start loss={losses[0]:.4f}  end loss={losses[-1]:.4f}")
@@ -589,7 +607,7 @@ def augrec_pretraining(
         for x, y in tqdm(train_dl):
             x, y = x.to(device), y.to(device)
             logits = model(x, head="aug")
-            loss = F.binary_cross_entropy_with_logits(logits, y)
+            loss = bce_loss(logits, y)
             opt.zero_grad()
             loss.backward()
             opt.step()
