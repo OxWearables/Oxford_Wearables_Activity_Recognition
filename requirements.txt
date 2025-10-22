@@ -13,5 +13,5 @@ torch
 torchaudio
 torchvision
 actipy>=3
-#stepcount  # too strict versions
 nvidia-ml-py  # for get_gpu.py to auto grab A100 MIGs
+transforms3d
